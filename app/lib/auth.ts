@@ -18,6 +18,31 @@ export const auth = betterAuth({
     minPasswordLength: 8,
   },
 
+  user: {
+    additionalFields: {
+      firstName: {
+        type: "string",
+        required: false,
+        input: false,
+      },
+      lastName: {
+        type: "string",
+        required: false,
+        input: false,
+      },
+      jobTitle: {
+        type: "string",
+        required: false,
+        input: false,
+      },
+      bio: {
+        type: "string",
+        required: false,
+        input: false,
+      },
+    },
+  },
+
   trustedOrigins: [
     "http://localhost:3000",
     appUrl,

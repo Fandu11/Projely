@@ -38,7 +38,7 @@ export default async function Navbar() {
         <div className="flex shrink-0 items-center gap-4">
           {/* Utilisateur connecté */}
           <Link
-            href="/dashboard"
+            href="/profile"
             className="flex items-center gap-3"
           >
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 font-semibold text-indigo-700">
