@@ -27,7 +27,10 @@ async function ProjectsContent() {
 
   const projects = await prisma.project.findMany({
     where: {
-      ownerId: session.user.id,
+      OR: [
+        { ownerId: session.user.id },
+        { members: { some: { id: session.user.id } } },
+      ],
     },
     orderBy: {
       updatedAt: "desc",
@@ -58,19 +61,24 @@ async function ProjectsContent() {
       ) : (
         <ul className="space-y-4">
           {projects.map((project) => (
-            <li
-              key={project.id}
-              className="rounded-lg border p-4"
-            >
-              <h2 className="text-xl font-semibold">
-                {project.name}
-              </h2>
+            <li key={project.id}>
+              <Link
+                href={`/projects/${project.id}`}
+                className="block rounded-xl border border-slate-200 bg-white p-5 transition hover:border-indigo-400 hover:shadow-md"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-xl font-semibold text-slate-900">
+                    {project.name}
+                  </h2>
+                  <span className="text-indigo-600">→</span>
+                </div>
 
-              {project.description && (
-                <p className="mt-2 text-gray-600">
-                  {project.description}
-                </p>
-              )}
+                {project.description && (
+                  <p className="mt-2 text-sm text-slate-600">
+                    {project.description}
+                  </p>
+                )}
+              </Link>
             </li>
           ))}
         </ul>
