@@ -3,19 +3,39 @@ import Link from "next/link";
 
 const navigation = [
   {
-    label: "Tableau de bord",
+    label: "Acceuil",
     href: "/",
     icon: "⌂",
-  },
-  {
-    label: "Mes projets",
-    href: "/projects",
-    icon: "▤",
   },
   {
     label: "Mes tâches",
     href: "/tasks",
     icon: "✓",
+  },
+  {
+    label: "Equipe",
+    href: "/teams",
+    icon: "👥",
+  },
+  {
+    label: "Notifications",
+    href: "/notifications",
+    icon: "🔔",
+  },
+  {
+    label: "Calendrier",
+    href: "/calendar",
+    icon: "📅",
+  },
+  {
+    label: "Statistiques",
+    href: "/statistics",
+    icon: "📊",
+  },
+  {
+    label: "Mes Projets",
+    href: "/projects",
+    icon: "▤",
   },
 ];
 
