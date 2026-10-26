@@ -1,10 +1,19 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { auth } from "@/app/lib/auth";
 import LogoutButton from "@/app/components/LogoutButton";
 
-export default async function DashboardPage() {
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<DashboardFallback />}>
+      <DashboardContent />
+    </Suspense>
+  );
+}
+
+async function DashboardContent() {
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -30,6 +39,17 @@ export default async function DashboardPage() {
       <div className="mt-6">
         <LogoutButton />
       </div>
+    </main>
+  );
+}
+
+function DashboardFallback() {
+  return (
+    <main className="mx-auto max-w-4xl p-8">
+      <div className="h-9 w-64 animate-pulse rounded bg-slate-200" />
+      <div className="mt-4 h-6 w-56 animate-pulse rounded bg-slate-200" />
+      <div className="mt-2 h-5 w-72 animate-pulse rounded bg-slate-200" />
+      <div className="mt-6 h-10 w-36 animate-pulse rounded bg-slate-200" />
     </main>
   );
 }

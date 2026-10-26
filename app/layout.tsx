@@ -1,8 +1,9 @@
 
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./globals.css";
-import Sidebar from "./components/Sidebar/Sidebar";
-import Navbar from "./components/Navbar/Navbar";
+import Sidebar from "./components/Sidebar";
+import Navbar from "./components/Navbar";
 
 export const metadata: Metadata = {
   title: "ProjectGestion",
@@ -21,7 +22,9 @@ export default function RootLayout({
           <Sidebar />
 
           <div className="min-w-0 flex-1">
-            <Navbar />
+            <Suspense fallback={<NavbarFallback />}>
+              <Navbar />
+            </Suspense>
 
             <main className="p-6">
               {children}
@@ -30,5 +33,14 @@ export default function RootLayout({
         </div>
       </body>
     </html>
+  );
+}
+
+function NavbarFallback() {
+  return (
+    <header className="flex h-16 items-center justify-between gap-4 border-b border-slate-200 bg-white px-6">
+      <div className="h-10 w-full max-w-xl rounded-lg bg-slate-100" />
+      <div className="h-10 w-28 rounded-lg bg-slate-100" />
+    </header>
   );
 }
