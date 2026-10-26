@@ -68,7 +68,7 @@ export default async function Sidebar() {
           </p>
 
           <Link
-            href="/projects"
+            href="/projects/new"
             title="Voir tous les projets"
             className="rounded px-2 text-lg text-slate-400 hover:bg-slate-800 hover:text-white"
           >

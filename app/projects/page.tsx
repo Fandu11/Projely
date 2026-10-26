@@ -1,5 +1,6 @@
 
 import { headers } from "next/headers";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { auth } from "@/app/lib/auth";
@@ -35,9 +36,22 @@ async function ProjectsContent() {
 
   return (
     <main className="p-8">
-      <h1 className="mb-6 text-3xl font-bold">
-        Mes projets
-      </h1>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Mes projets</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Organise ton travail et suis l'avancement de tes projets.
+          </p>
+        </div>
+
+        <Link
+          href="/projects/new"
+          className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700"
+        >
+          <span className="text-lg">+</span>
+          Nouveau projet
+        </Link>
+      </div>
 
       {projects.length === 0 ? (
         <p>Tu n&apos;as pas encore de projet.</p>
