@@ -155,3 +155,63 @@ export async function addProjectMember(
     success: `${user.name || user.email} a été ajouté au projet.`,
   };
 }
+
+
+export async function removeProjectMember(
+  projectId: string,
+  memberId: string,
+  _formData: FormData,
+) {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  if (!session?.user) {
+    throw new Error("Vous devez être connecté.");
+  }
+
+  // Seul le propriétaire peut retirer un membre.
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      ownerId: session.user.id,
+    },
+    select: {
+      id: true,
+      ownerId: true,
+      members: {
+        where: { id: memberId },
+        select: { id: true },
+      },
+    },
+  });
+
+  if (!project) {
+    throw new Error(
+      "Projet introuvable ou vous n'êtes pas propriétaire.",
+    );
+  }
+
+  // Empêcher le propriétaire de se retirer lui-même.
+  if (memberId === project.ownerId) {
+    throw new Error(
+      "Le propriétaire ne peut pas être retiré du projet.",
+    );
+  }
+
+  // Vérifier que l'utilisateur est bien membre du projet.
+  if (project.members.length === 0) {
+    throw new Error("Cet utilisateur n'est pas membre du projet.");
+  }
+
+  await prisma.project.update({
+    where: { id: project.id },
+    data: {
+      members: {
+        disconnect: { id: memberId },
+      },
+    },
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+}

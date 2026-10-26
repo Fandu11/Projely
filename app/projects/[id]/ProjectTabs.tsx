@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { useActionState } from "react";
 import { addProjectMember } from "./actions";
+import { removeProjectMember } from "./actions";
 
 type ProjectMember = {
   id: string;
@@ -171,7 +172,40 @@ export default function ProjectTabs({
                   </div>
 
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                    {member.role}
+                  
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                        {member.role}
+                      </span>
+
+                      {currentUserId === ownerId &&
+                        member.id !== ownerId && (
+                          <form
+                            action={removeProjectMember.bind(
+                              null,
+                              projectId,
+                              member.id,
+                            )}
+                            onSubmit={(event) => {
+                              if (
+                                !window.confirm(
+                                  `Retirer ${member.name || member.email} de ce projet ?`,
+                                )
+                              ) {
+                                event.preventDefault();
+                              }
+                            }}
+                          >
+                            <button
+                              type="submit"
+                              className="rounded-lg px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+                            >
+                              Retirer
+                            </button>
+                          </form>
+                        )}
+                    </div>
+
                   </span>
                 </div>
               ))}

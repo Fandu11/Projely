@@ -141,14 +141,8 @@ async function ProjectContent({
   return (
     <main className="min-w-0 p-6 md:p-8">
       {/* En-tête du projet */}
-      <Link
-        href="/projects"
-        className="text-sm text-slate-500 transition hover:text-indigo-600"
-      >
-        ← Retour à mes projets
-      </Link>
 
-      <header className="mb-8 mt-5">
+      <header className="mb-8 mt-0">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">
