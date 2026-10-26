@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -9,19 +8,23 @@ datasource db {
 }
 
 model User {
-  id            String    @id
+  id            String   @id
   name          String
   firstName     String?
   lastName      String?
   jobTitle      String?
-  bio           String?   @db.Text
+  bio           String?  @db.Text
   email         String
-  emailVerified Boolean   @default(false)
+  emailVerified Boolean  @default(false)
   image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  sessions      Session[]
-  accounts      Account[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessions Session[]
+  accounts Account[]
+
+  ownedProjects Project[] @relation("ProjectOwner")
+  memberOf      Project[] @relation("ProjectMembers")
 
   @@unique([email])
   @@map("user")
@@ -73,4 +76,20 @@ model Verification {
 
   @@index([identifier])
   @@map("verification")
+}
+
+model Project {
+  id          String  @id @default(cuid())
+  name        String
+  description String? @db.Text
+
+  ownerId String
+  owner   User   @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  members User[] @relation("ProjectMembers")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
 }
