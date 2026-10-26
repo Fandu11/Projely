@@ -2,6 +2,8 @@
 "use client";
 
 import { useState } from "react";
+import { useActionState } from "react";
+import { addProjectMember } from "./actions";
 
 type ProjectMember = {
   id: string;
@@ -10,6 +12,9 @@ type ProjectMember = {
 };
 
 type ProjectTabsProps = {
+  projectId: string;
+  currentUserId: string;
+  ownerId: string;
   owner: ProjectMember;
   members: ProjectMember[];
   tasksContent: React.ReactNode;
@@ -25,6 +30,9 @@ const tabs = [
 type TabId = (typeof tabs)[number]["id"];
 
 export default function ProjectTabs({
+  projectId,
+  currentUserId,
+  ownerId,
   owner,
   members,
   tasksContent,
@@ -37,6 +45,12 @@ export default function ProjectTabs({
       .filter((member) => member.id !== owner.id)
       .map((member) => ({ ...member, role: "Membre" })),
   ];
+
+  const [memberState, memberFormAction, isAddingMember] =
+  useActionState(
+    addProjectMember.bind(null, projectId),
+    {} as { success?: string; error?: string },
+  );
 
   return (
     <div>
@@ -82,6 +96,53 @@ export default function ProjectTabs({
               {allMembers.length} personne(s) dans ce projet
             </p>
           </div>
+
+          {/* Formulaire pour ajouter un membre */}
+          {currentUserId === ownerId && (
+            <form
+              action={memberFormAction}
+              className="mb-6 rounded-lg border border-slate-200 p-4"
+            >
+              <label
+                htmlFor="member-email"
+                className="mb-2 block text-sm font-medium text-slate-700"
+              >
+                Ajouter un membre par e-mail
+              </label>
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <input
+                  id="member-email"
+                  name="email"
+                  type="email"
+                  required
+                  placeholder="exemple@email.com"
+                  className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+
+                <button
+                  type="submit"
+                  disabled={isAddingMember}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isAddingMember ? "Ajout..." : "Ajouter"}
+                </button>
+              </div>
+
+              {memberState.error && (
+                <p role="alert" className="mt-3 text-sm text-red-600">
+                  {memberState.error}
+                </p>
+              )}
+
+              {memberState.success && (
+                <p role="status" className="mt-3 text-sm text-green-700">
+                  {memberState.success}
+                </p>
+              )}
+            </form>
+          )}
+
 
           {allMembers.length === 0 ? (
             <p className="text-sm text-slate-500">

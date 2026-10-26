@@ -185,6 +185,9 @@ async function ProjectContent({
 
       {/* Tableau Kanban */}
       <ProjectTabs
+        projectId={project.id}
+        currentUserId={session.user.id}
+        ownerId={project.ownerId}
         owner={project.owner}
         members={project.members}
         tasksContent={
