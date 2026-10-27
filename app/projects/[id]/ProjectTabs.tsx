@@ -4,6 +4,7 @@
 import { useState, useActionState } from "react";
 import Link from "next/link";
 import { addProjectMember, removeProjectMember } from "./actions";
+import SprintsSection from "./SprintsSection";
 
 type ProjectMember = {
   id: string;
@@ -18,6 +19,16 @@ type ProjectTabsProps = {
   owner: ProjectMember;
   members: ProjectMember[];
   tasksContent: React.ReactNode;
+    sprints: {
+    id: string;
+    name: string;
+    goal: string | null;
+    startDate: string;
+    endDate: string;
+    status: "PLANNED" | "ACTIVE" | "COMPLETED";
+    totalTasks: number;
+    completedTasks: number;
+  }[];
 };
 
 const tabs = [
@@ -37,6 +48,7 @@ export default function ProjectTabs({
   owner,
   members,
   tasksContent,
+  sprints,
 }: ProjectTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("tasks");
 
@@ -78,26 +90,7 @@ export default function ProjectTabs({
       {activeTab === "tasks" && tasksContent}
 
       {activeTab === "sprints" && (
-        <section className="rounded-xl border border-slate-200 bg-white p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-slate-900">
-                Sprints du projet
-              </h2>
-              <p className="mt-2 max-w-xl text-sm text-slate-600">
-                Planifie le travail en périodes définies, organise les tâches
-                et suis leur progression.
-              </p>
-            </div>
-
-            <Link
-              href={`/projects/${projectId}/sprints`}
-              className="inline-flex shrink-0 items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700"
-            >
-              Gérer les sprints
-            </Link>
-          </div>
-        </section>
+        <SprintsSection projectId={projectId} sprints={sprints} />
       )}
 
       {activeTab === "calendar" && (

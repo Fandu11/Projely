@@ -130,6 +130,21 @@ async function ProjectContent({
           },
         },
       },
+      sprints: {
+        orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
+        include: {
+          tasks: {
+            select: {
+              status: true,
+            },
+          },
+          _count: {
+            select: {
+              tasks: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -181,6 +196,18 @@ async function ProjectContent({
         ownerId={project.ownerId}
         owner={project.owner}
         members={project.members}
+        sprints={project.sprints.map((sprint) => ({
+          id: sprint.id,
+          name: sprint.name,
+          goal: sprint.goal,
+          startDate: sprint.startDate.toISOString(),
+          endDate: sprint.endDate.toISOString(),
+          status: sprint.status,
+          totalTasks: sprint._count.tasks,
+          completedTasks: sprint.tasks.filter(
+            (task) => task.status === "DONE",
+          ).length,
+        }))}
         tasksContent={
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
             {columns.map((column) => {
