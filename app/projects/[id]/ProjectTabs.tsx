@@ -1,10 +1,9 @@
 
 "use client";
 
-import { useState } from "react";
-import { useActionState } from "react";
-import { addProjectMember } from "./actions";
-import { removeProjectMember } from "./actions";
+import { useState, useActionState } from "react";
+import Link from "next/link";
+import { addProjectMember, removeProjectMember } from "./actions";
 
 type ProjectMember = {
   id: string;
@@ -23,6 +22,7 @@ type ProjectTabsProps = {
 
 const tabs = [
   { id: "tasks", label: "Tâches" },
+  { id: "sprints", label: "Sprints" },
   { id: "calendar", label: "Vue calendrier" },
   { id: "members", label: "Membres" },
   { id: "settings", label: "Paramètres" },
@@ -47,8 +47,7 @@ export default function ProjectTabs({
       .map((member) => ({ ...member, role: "Membre" })),
   ];
 
-  const [memberState, memberFormAction, isAddingMember] =
-  useActionState(
+  const [memberState, memberFormAction, isAddingMember] = useActionState(
     addProjectMember.bind(null, projectId),
     {} as { success?: string; error?: string },
   );
@@ -78,6 +77,29 @@ export default function ProjectTabs({
 
       {activeTab === "tasks" && tasksContent}
 
+      {activeTab === "sprints" && (
+        <section className="rounded-xl border border-slate-200 bg-white p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-slate-900">
+                Sprints du projet
+              </h2>
+              <p className="mt-2 max-w-xl text-sm text-slate-600">
+                Planifie le travail en périodes définies, organise les tâches
+                et suis leur progression.
+              </p>
+            </div>
+
+            <Link
+              href={`/projects/${projectId}/sprints`}
+              className="inline-flex shrink-0 items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700"
+            >
+              Gérer les sprints
+            </Link>
+          </div>
+        </section>
+      )}
+
       {activeTab === "calendar" && (
         <div className="rounded-xl border border-slate-200 p-8 text-center">
           <h2 className="text-lg font-semibold">Vue calendrier</h2>
@@ -98,7 +120,6 @@ export default function ProjectTabs({
             </p>
           </div>
 
-          {/* Formulaire pour ajouter un membre */}
           {currentUserId === ownerId && (
             <form
               action={memberFormAction}
@@ -144,73 +165,57 @@ export default function ProjectTabs({
             </form>
           )}
 
-
-          {allMembers.length === 0 ? (
-            <p className="text-sm text-slate-500">
-              Aucun membre dans ce projet.
-            </p>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {allMembers.map((member) => (
-                <div
-                  key={member.id}
-                  className="flex items-center gap-3 py-4"
-                >
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-100 font-semibold text-blue-700">
-                    {(member.name || member.email)
-                      .charAt(0)
-                      .toUpperCase()}
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium text-slate-900">
-                      {member.name || "Sans nom"}
-                    </p>
-                    <p className="truncate text-sm text-slate-500">
-                      {member.email}
-                    </p>
-                  </div>
-
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                  
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                        {member.role}
-                      </span>
-
-                      {currentUserId === ownerId &&
-                        member.id !== ownerId && (
-                          <form
-                            action={removeProjectMember.bind(
-                              null,
-                              projectId,
-                              member.id,
-                            )}
-                            onSubmit={(event) => {
-                              if (
-                                !window.confirm(
-                                  `Retirer ${member.name || member.email} de ce projet ?`,
-                                )
-                              ) {
-                                event.preventDefault();
-                              }
-                            }}
-                          >
-                            <button
-                              type="submit"
-                              className="rounded-lg px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
-                            >
-                              Retirer
-                            </button>
-                          </form>
-                        )}
-                    </div>
-
-                  </span>
+          <div className="divide-y divide-slate-100">
+            {allMembers.map((member) => (
+              <div
+                key={member.id}
+                className="flex items-center gap-3 py-4"
+              >
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-100 font-semibold text-blue-700">
+                  {(member.name || member.email).charAt(0).toUpperCase()}
                 </div>
-              ))}
-            </div>
-          )}
+
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-slate-900">
+                    {member.name || "Sans nom"}
+                  </p>
+                  <p className="truncate text-sm text-slate-500">
+                    {member.email}
+                  </p>
+                </div>
+
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                  {member.role}
+                </span>
+
+                {currentUserId === ownerId && member.id !== ownerId && (
+                  <form
+                    action={removeProjectMember.bind(
+                      null,
+                      projectId,
+                      member.id,
+                    )}
+                    onSubmit={(event) => {
+                      if (
+                        !window.confirm(
+                          `Retirer ${member.name || member.email} de ce projet ?`,
+                        )
+                      ) {
+                        event.preventDefault();
+                      }
+                    }}
+                  >
+                    <button
+                      type="submit"
+                      className="rounded-lg px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+                    >
+                      Retirer
+                    </button>
+                  </form>
+                )}
+              </div>
+            ))}
+          </div>
         </section>
       )}
 

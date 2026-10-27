@@ -215,3 +215,80 @@ export async function removeProjectMember(
 
   revalidatePath(`/projects/${projectId}`);
 }
+
+export type SprintFormState = {
+  error?: string;
+};
+
+export async function createSprint(
+  projectId: string,
+  _previousState: SprintFormState,
+  formData: FormData,
+): Promise<SprintFormState> {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  if (!session?.user) {
+    redirect("/login");
+  }
+
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      OR: [
+        { ownerId: session.user.id },
+        { members: { some: { id: session.user.id } } },
+      ],
+    },
+    select: { id: true },
+  });
+
+  if (!project) {
+    return { error: "Projet introuvable ou accès non autorisé." };
+  }
+
+  const name = String(formData.get("name") ?? "").trim();
+  const goal = String(formData.get("goal") ?? "").trim();
+  const startValue = String(formData.get("startDate") ?? "");
+  const endValue = String(formData.get("endDate") ?? "");
+
+  if (!name || name.length > 100) {
+    return { error: "Le nom doit contenir entre 1 et 100 caractères." };
+  }
+
+  if (goal.length > 1000) {
+    return { error: "L'objectif ne doit pas dépasser 1 000 caractères." };
+  }
+
+  if (!startValue || !endValue) {
+    return { error: "Renseigne la date de début et la date de fin." };
+  }
+
+  const startDate = new Date(`${startValue}T00:00:00.000Z`);
+  const endDate = new Date(`${endValue}T23:59:59.999Z`);
+
+  if (
+    Number.isNaN(startDate.getTime()) ||
+    Number.isNaN(endDate.getTime()) ||
+    startDate > endDate
+  ) {
+    return { error: "La date de fin doit être égale ou postérieure à la date de début." };
+  }
+
+  await prisma.sprint.create({
+    data: {
+      name,
+      goal: goal || null,
+      startDate,
+      endDate,
+      projectId,
+      status: "PLANNED",
+    },
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath(`/projects/${projectId}/sprints`);
+
+  redirect(`/projects/${projectId}/sprints`);
+}
