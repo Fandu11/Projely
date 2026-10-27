@@ -2,7 +2,6 @@
 "use client";
 
 import { useState, useActionState } from "react";
-import Link from "next/link";
 import { addProjectMember, removeProjectMember } from "./actions";
 import SprintsSection from "./SprintsSection";
 
@@ -90,7 +89,10 @@ export default function ProjectTabs({
       {activeTab === "tasks" && tasksContent}
 
       {activeTab === "sprints" && (
-        <SprintsSection projectId={projectId} sprints={sprints} />
+        <SprintsSection
+          projectId={projectId}
+          sprints={sprints.map((sprint) => ({ ...sprint, tasks: [] }))}
+        />
       )}
 
       {activeTab === "calendar" && (

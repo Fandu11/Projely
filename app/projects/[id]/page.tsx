@@ -134,14 +134,18 @@ async function ProjectContent({
         orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
         include: {
           tasks: {
+            orderBy: { createdAt: "asc" },
             select: {
+              id: true,
+              title: true,
+              type: true,
               status: true,
+              priority: true,
+              parentTaskId: true,
             },
           },
           _count: {
-            select: {
-              tasks: true,
-            },
+            select: { tasks: true },
           },
         },
       },
@@ -207,6 +211,14 @@ async function ProjectContent({
           completedTasks: sprint.tasks.filter(
             (task) => task.status === "DONE",
           ).length,
+          tasks: sprint.tasks.map((task) => ({
+            id: task.id,
+            title: task.title,
+            type: task.type,
+            status: task.status,
+            priority: task.priority,
+            parentTaskId: task.parentTaskId,
+          })),
         }))}
         tasksContent={
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
