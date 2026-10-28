@@ -19,21 +19,19 @@ const statusOptions = [
   { value: "IN_PROGRESS", label: "En cours" },
   { value: "TO_REVIEW", label: "À revoir" },
   { value: "DONE", label: "Fini" },
-];
+] as const;
 
 const priorityOptions = [
   { value: "LOW", label: "Faible" },
   { value: "MEDIUM", label: "Moyenne" },
   { value: "HIGH", label: "Haute" },
   { value: "CRITICAL", label: "Critique" },
-];
+] as const;
 
 const typeOptions = [
   { value: "TASK", label: "Tâche" },
   { value: "BUG", label: "Bug" },
-  { value: "STORY", label: "Story" },
-  { value: "EPIC", label: "Epic" },
-];
+] as const;
 
 export default function EditTaskPage(props: EditTaskPageProps) {
   return (
@@ -54,7 +52,9 @@ async function EditTaskContent({
     headers: await headers(),
   });
 
-  if (!session?.user) redirect("/login");
+  if (!session?.user) {
+    redirect("/login");
+  }
 
   const project = await prisma.project.findFirst({
     where: {
@@ -67,39 +67,68 @@ async function EditTaskContent({
     select: {
       id: true,
       name: true,
-      ownerId: true,
+      owner: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
       members: {
-        select: { id: true, name: true, email: true },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
       },
     },
   });
 
-  if (!project) notFound();
+  if (!project) {
+    notFound();
+  }
 
   const task = await prisma.task.findFirst({
-    where: { id: taskId, projectId },
+    where: {
+      id: taskId,
+      story: {
+        epic: {
+          projectId,
+        },
+      },
+    },
   });
 
-  if (!task) notFound();
+  if (!task) {
+    notFound();
+  }
 
-  const candidates = await prisma.task.findMany({
+  // Les Stories disponibles dans les Epics de ce projet.
+  const stories = await prisma.story.findMany({
     where: {
-      projectId,
-      id: { not: taskId },
-      type: { in: ["STORY", "EPIC"] },
+      epic: {
+        projectId,
+      },
     },
     select: {
       id: true,
       title: true,
-      type: true,
+      epic: {
+        select: {
+          name: true,
+        },
+      },
     },
-    orderBy: { title: "asc" },
+    orderBy: {
+      title: "asc",
+    },
   });
 
+  // Le propriétaire et les membres du projet peuvent être assignés.
   const members = [
-    { id: project.ownerId, name: "Propriétaire", email: "" },
+    project.owner,
     ...project.members.filter(
-      (member) => member.id !== project.ownerId,
+      (member) => member.id !== project.owner.id,
     ),
   ];
 
@@ -112,21 +141,26 @@ async function EditTaskContent({
         ← Retour au tableau
       </Link>
 
-      <h1 className="mt-5 text-3xl font-bold text-slate-900">
-        Modifier la tâche
-      </h1>
-      <p className="mt-2 text-sm text-slate-500">
-        Projet : {project.name}
-      </p>
+      <header className="mt-5">
+        <h1 className="text-3xl font-bold text-slate-900">
+          Modifier la tâche
+        </h1>
+        <p className="mt-2 text-sm text-slate-500">
+          Projet : {project.name}
+        </p>
+      </header>
 
       {query.error && (
-        <p role="alert" className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+        <p
+          role="alert"
+          className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700"
+        >
           {query.error === "assignment"
             ? "Choisis une personne ou un groupe, mais pas les deux."
             : query.error === "assignee"
               ? "La personne choisie n'est pas membre de ce projet."
-              : query.error === "parent"
-                ? "La Story ou l'Epic parente est invalide."
+              : query.error === "story"
+                ? "La Story sélectionnée n'appartient pas à ce projet."
                 : "Vérifie les champs du formulaire."}
         </p>
       )}
@@ -136,7 +170,10 @@ async function EditTaskContent({
         className="mt-6 space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
       >
         <div>
-          <label htmlFor="title" className="mb-2 block text-sm font-medium">
+          <label
+            htmlFor="title"
+            className="mb-2 block text-sm font-medium"
+          >
             Titre *
           </label>
           <input
@@ -150,7 +187,10 @@ async function EditTaskContent({
         </div>
 
         <div>
-          <label htmlFor="description" className="mb-2 block text-sm font-medium">
+          <label
+            htmlFor="description"
+            className="mb-2 block text-sm font-medium"
+          >
             Description
           </label>
           <textarea
@@ -165,7 +205,10 @@ async function EditTaskContent({
 
         <div className="grid gap-5 sm:grid-cols-2">
           <div>
-            <label htmlFor="status" className="mb-2 block text-sm font-medium">
+            <label
+              htmlFor="status"
+              className="mb-2 block text-sm font-medium"
+            >
               Statut
             </label>
             <select
@@ -183,7 +226,10 @@ async function EditTaskContent({
           </div>
 
           <div>
-            <label htmlFor="priority" className="mb-2 block text-sm font-medium">
+            <label
+              htmlFor="priority"
+              className="mb-2 block text-sm font-medium"
+            >
               Priorité
             </label>
             <select
@@ -202,7 +248,10 @@ async function EditTaskContent({
         </div>
 
         <div>
-          <label htmlFor="type" className="mb-2 block text-sm font-medium">
+          <label
+            htmlFor="type"
+            className="mb-2 block text-sm font-medium"
+          >
             Type
           </label>
           <select
@@ -220,7 +269,37 @@ async function EditTaskContent({
         </div>
 
         <div>
-          <label htmlFor="assigneeId" className="mb-2 block text-sm font-medium">
+          <label
+            htmlFor="storyId"
+            className="mb-2 block text-sm font-medium"
+          >
+            Story associée *
+          </label>
+          <select
+            id="storyId"
+            name="storyId"
+            required
+            defaultValue={task.storyId}
+            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3"
+          >
+            {stories.map((story) => (
+              <option key={story.id} value={story.id}>
+                {story.epic.name} — {story.title}
+              </option>
+            ))}
+          </select>
+          {stories.length === 0 && (
+            <p className="mt-1 text-sm text-red-600">
+              Crée d'abord un Epic et une Story dans ce projet.
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label
+            htmlFor="assigneeId"
+            className="mb-2 block text-sm font-medium"
+          >
             Assigner à une personne
           </label>
           <select
@@ -232,7 +311,7 @@ async function EditTaskContent({
             <option value="">Personne</option>
             {members.map((member) => (
               <option key={member.id} value={member.id}>
-                {member.name || member.email || member.id}
+                {member.name || member.email}
                 {member.email ? ` — ${member.email}` : ""}
               </option>
             ))}
@@ -240,7 +319,10 @@ async function EditTaskContent({
         </div>
 
         <div>
-          <label htmlFor="assignedGroup" className="mb-2 block text-sm font-medium">
+          <label
+            htmlFor="assignedGroup"
+            className="mb-2 block text-sm font-medium"
+          >
             Ou assigner à un groupe
           </label>
           <input
@@ -252,29 +334,7 @@ async function EditTaskContent({
             className="w-full rounded-lg border border-slate-300 px-4 py-3"
           />
           <p className="mt-1 text-xs text-slate-500">
-            Laisse ce champ vide si tu assignes la tâche à une personne.
-          </p>
-        </div>
-
-        <div>
-          <label htmlFor="parentTaskId" className="mb-2 block text-sm font-medium">
-            Story ou Epic parente
-          </label>
-          <select
-            id="parentTaskId"
-            name="parentTaskId"
-            defaultValue={task.parentTaskId ?? ""}
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3"
-          >
-            <option value="">Aucune</option>
-            {candidates.map((candidate) => (
-              <option key={candidate.id} value={candidate.id}>
-                {candidate.type === "EPIC" ? "Epic" : "Story"} — {candidate.title}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-slate-500">
-            Une Story peut être rattachée à une Epic. Une tâche ou un bug peut être rattaché à une Story ou une Epic.
+            Pour une assignation à un groupe, laisse la personne vide.
           </p>
         </div>
 
@@ -285,9 +345,11 @@ async function EditTaskContent({
           >
             Annuler
           </Link>
+
           <button
             type="submit"
-            className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700"
+            disabled={stories.length === 0}
+            className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Enregistrer
           </button>
