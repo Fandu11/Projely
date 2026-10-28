@@ -8,6 +8,7 @@ import { auth } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import { createTask } from "./actions";
 import ProjectTabs from "./ProjectTabs";
+import CalendarView from "./CalendarView";
 
 export const instant = false;
 
@@ -93,10 +94,7 @@ async function ProjectContent({
         },
       },
       sprints: {
-        orderBy: [
-          { startDate: "asc" },
-          { endDate: "asc" },
-        ],
+        orderBy: [{ startDate: "asc" }, { endDate: "asc" }],
         include: {
           tasks: {
             where: {
@@ -241,6 +239,28 @@ async function ProjectContent({
     epicName: task.story?.epic?.name ?? "Aucun epic",
   }));
 
+  // Préparer les données des sprints une seule fois pour les deux composants.
+  const calendarSprints = project.sprints.map((sprint) => ({
+    id: sprint.id,
+    name: sprint.name,
+    goal: sprint.goal,
+    startDate: sprint.startDate.toISOString(),
+    endDate: sprint.endDate.toISOString(),
+    status: sprint.status,
+    totalTasks: sprint._count.tasks,
+    completedTasks: sprint.tasks.filter(
+      (task) => task.status === "DONE",
+    ).length,
+    tasks: sprint.tasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      type: task.type,
+      status: task.status,
+      priority: task.priority,
+      storyId: task.storyId,
+    })),
+  }));
+
   return (
     <main className="min-w-0 p-6 md:p-8">
       <header className="mb-8 mt-0">
@@ -319,27 +339,13 @@ async function ProjectContent({
           epicName: task.epicName,
           sprintId: task.sprintId,
         }))}
-        sprints={project.sprints.map((sprint) => ({
-          id: sprint.id,
-          name: sprint.name,
-          goal: sprint.goal,
-          startDate: sprint.startDate.toISOString(),
-          endDate: sprint.endDate.toISOString(),
-          status: sprint.status,
-          totalTasks: sprint._count.tasks,
-          completedTasks: sprint.tasks.filter(
-            (task) => task.status === "DONE",
-          ).length,
-          tasks: sprint.tasks.map((task) => ({
-            id: task.id,
-            title: task.title,
-            type: task.type,
-            status: task.status,
-            priority: task.priority,
-            storyId: task.storyId,
-          })),
-          
-        }))}
+        sprints={calendarSprints}
+        calendarContent={
+          <CalendarView
+            projectId={project.id}
+            sprints={calendarSprints}
+          />
+        }
         tasksContent={
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
             {columns.map((column) => {

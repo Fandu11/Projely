@@ -7,14 +7,13 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 import BacklogSection from "./BacklogSection";
+import SprintsSection from "./SprintsSection";
 
 import {
   addProjectMember,
   removeProjectMember,
   type MemberActionState,
 } from "./actions";
-
-import SprintsSection from "./SprintsSection";
 
 type ProjectMember = {
   id: string;
@@ -81,6 +80,7 @@ type ProjectTabsProps = {
   owner: ProjectMember;
   members: ProjectMember[];
   tasksContent: ReactNode;
+  calendarContent: ReactNode;
   sprints: ProjectSprint[];
   allTasks: ProjectTask[];
   epics: BacklogEpic[];
@@ -136,6 +136,7 @@ export default function ProjectTabs({
   owner,
   members,
   tasksContent,
+  calendarContent,
   sprints,
   allTasks,
   epics,
@@ -222,13 +223,11 @@ export default function ProjectTabs({
 
       {activeTab === "sprints" && (
         <div className="space-y-8">
-          {/* Chaque sprint reçoit maintenant ses propres tâches. */}
           <SprintsSection
             projectId={projectId}
             sprints={sprints}
           />
 
-          {/* Tâches qui ne sont associées à aucun sprint. */}
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
             <div className="border-b border-slate-200 px-4 py-4">
               <h2 className="text-lg font-semibold text-slate-900">
@@ -279,14 +278,7 @@ export default function ProjectTabs({
         </div>
       )}
 
-      {activeTab === "calendar" && (
-        <div className="rounded-xl border border-slate-200 p-8 text-center">
-          <h2 className="text-lg font-semibold">Vue calendrier</h2>
-          <p className="mt-2 text-sm text-slate-500">
-            La vue calendrier sera disponible ici.
-          </p>
-        </div>
-      )}
+      {activeTab === "calendar" && calendarContent}
 
       {activeTab === "members" && (
         <section className="rounded-xl border border-slate-200 bg-white p-5">
@@ -352,7 +344,9 @@ export default function ProjectTabs({
                 className="flex items-center gap-3 py-4"
               >
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-100 font-semibold text-blue-700">
-                  {(member.name || member.email).charAt(0).toUpperCase()}
+                  {(member.name || member.email)
+                    .charAt(0)
+                    .toUpperCase()}
                 </div>
 
                 <div className="min-w-0 flex-1">
