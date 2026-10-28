@@ -4,156 +4,169 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+
 import { auth } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 
 const statuses = ["TODO", "IN_PROGRESS", "TO_REVIEW", "DONE"] as const;
 const priorities = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
-const types = ["TASK", "BUG", "STORY", "EPIC"] as const;
+const types = ["TASK", "BUG"] as const;
+
+type TaskStatus = (typeof statuses)[number];
+type TaskPriority = (typeof priorities)[number];
+type TaskType = (typeof types)[number];
+
+function redirectWithError(
+  projectId: string,
+  taskId: string,
+  error: string,
+): never {
+  redirect(`/projects/${projectId}/tasks/${taskId}/edit?error=${error}`);
+}
+
+function getValue(formData: FormData, key: string): string {
+  return String(formData.get(key) ?? "").trim();
+}
 
 export async function updateTask(
   projectId: string,
   taskId: string,
   formData: FormData,
-) {
+): Promise<void> {
   const session = await auth.api.getSession({
     headers: await headers(),
   });
 
-  if (!session?.user) redirect("/login");
+  if (!session?.user?.id) {
+    redirect("/login");
+  }
 
+  const userId = session.user.id;
+
+  // Vérifier que l'utilisateur a accès au projet.
   const project = await prisma.project.findFirst({
     where: {
       id: projectId,
       OR: [
-        { ownerId: session.user.id },
-        { members: { some: { id: session.user.id } } },
+        { ownerId: userId },
+        { members: { some: { id: userId } } },
       ],
     },
     select: {
       id: true,
       ownerId: true,
-      members: { select: { id: true } },
+      members: {
+        select: {
+          id: true,
+        },
+      },
     },
   });
 
-  if (!project) redirect("/projects");
+  if (!project) {
+    redirect("/projects");
+  }
 
+  // Vérifier que la tâche appartient bien à ce projet.
   const currentTask = await prisma.task.findFirst({
-    where: { id: taskId, projectId },
-    select: { id: true },
+    where: {
+      id: taskId,
+      projectId: project.id,
+    },
+    select: {
+      id: true,
+    },
   });
 
-  if (!currentTask) redirect(`/projects/${projectId}`);
+  if (!currentTask) {
+    redirect(`/projects/${projectId}`);
+  }
 
-  const title = String(formData.get("title") ?? "").trim();
-  const description = String(formData.get("description") ?? "").trim();
-  const status = String(formData.get("status") ?? "");
-  const priority = String(formData.get("priority") ?? "");
-  const type = String(formData.get("type") ?? "");
-  const assigneeId = String(formData.get("assigneeId") ?? "") || null;
-  const assignedGroup = String(
-    formData.get("assignedGroup") ?? "",
-  ).trim();
-  const parentTaskId = String(
-    formData.get("parentTaskId") ?? "",
-  ) || null;
+  const title = getValue(formData, "title");
+  const description = getValue(formData, "description");
+  const status = getValue(formData, "status");
+  const priority = getValue(formData, "priority");
+  const type = getValue(formData, "type");
+  const storyId = getValue(formData, "storyId") || null;
+  const sprintId = getValue(formData, "sprintId") || null;
+  const assigneeId = getValue(formData, "assigneeId") || null;
 
+  // Vérifier les champs avant toute modification.
   if (
     title.length < 1 ||
     title.length > 150 ||
     description.length > 2000 ||
-    !statuses.includes(status as (typeof statuses)[number]) ||
-    !priorities.includes(priority as (typeof priorities)[number]) ||
-    !types.includes(type as (typeof types)[number])
+    !statuses.includes(status as TaskStatus) ||
+    !priorities.includes(priority as TaskPriority) ||
+    !types.includes(type as TaskType)
   ) {
-    redirect(`/projects/${projectId}/tasks/${taskId}/edit?error=invalid`);
+    redirectWithError(project.id, taskId, "invalid");
   }
 
-  // Une tâche est assignée soit à une personne, soit à un groupe.
-  if (assigneeId && assignedGroup) {
-    redirect(`/projects/${projectId}/tasks/${taskId}/edit?error=assignment`);
+  // Une Story doit appartenir au même projet.
+  if (storyId) {
+    const story = await prisma.story.findFirst({
+      where: {
+        id: storyId,
+        projectId: project.id,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!story) {
+      redirectWithError(project.id, taskId, "story");
+    }
   }
 
+  // Un Sprint doit appartenir au même projet.
+  if (sprintId) {
+    const sprint = await prisma.sprint.findFirst({
+      where: {
+        id: sprintId,
+        projectId: project.id,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!sprint) {
+      redirectWithError(project.id, taskId, "sprint");
+    }
+  }
+
+  // L'assigné doit être le propriétaire ou un membre du projet.
   if (assigneeId) {
     const isMember =
       assigneeId === project.ownerId ||
       project.members.some((member) => member.id === assigneeId);
 
     if (!isMember) {
-      redirect(`/projects/${projectId}/tasks/${taskId}/edit?error=assignee`);
-    }
-  }
-
-  let parentType: string | null = null;
-
-  if (parentTaskId) {
-    if (parentTaskId === taskId) {
-      redirect(`/projects/${projectId}/tasks/${taskId}/edit?error=parent`);
-    }
-
-    const parent = await prisma.task.findFirst({
-      where: { id: parentTaskId, projectId },
-      select: { id: true, type: true },
-    });
-
-    if (!parent) {
-      redirect(`/projects/${projectId}/tasks/${taskId}/edit?error=parent`);
-    }
-
-    parentType = parent.type;
-  }
-
-  // Empêche les relations hiérarchiques incohérentes.
-  if (
-    (type === "EPIC" && parentTaskId) ||
-    (type === "STORY" && parentType !== null && parentType !== "EPIC") ||
-    ((type === "TASK" || type === "BUG") &&
-      parentType !== null &&
-      parentType !== "STORY" &&
-      parentType !== "EPIC")
-  ) {
-    redirect(`/projects/${projectId}/tasks/${taskId}/edit?error=parent`);
-  }
-
-  // Empêche de rattacher un parent à l'un de ses descendants.
-  if (parentTaskId) {
-    let ancestorId: string | null = parentTaskId;
-    const visited = new Set<string>();
-
-    while (ancestorId) {
-      if (ancestorId === taskId || visited.has(ancestorId)) {
-        redirect(`/projects/${projectId}/tasks/${taskId}/edit?error=parent`);
-      }
-
-      visited.add(ancestorId);
-
-      const ancestor: { parentTaskId: string | null } | null =
-        await prisma.task.findFirst({
-          where: { id: ancestorId, projectId },
-          select: { parentTaskId: true },
-        });
-
-      ancestorId = ancestor?.parentTaskId ?? null;
+      redirectWithError(project.id, taskId, "assignee");
     }
   }
 
   await prisma.task.update({
-    where: { id: taskId },
+    where: {
+      id: currentTask.id,
+    },
     data: {
       title,
       description: description || null,
-      status: status as (typeof statuses)[number],
-      priority: priority as (typeof priorities)[number],
-      type: type as (typeof types)[number],
+      status: status as TaskStatus,
+      priority: priority as TaskPriority,
+      type: type as TaskType,
+      storyId,
+      sprintId,
       assigneeId,
-      assignedGroup: assignedGroup || null,
-      parentTaskId,
     },
   });
 
-  revalidatePath(`/projects/${projectId}`);
-  revalidatePath(`/projects/${projectId}/tasks/${taskId}/edit`);
+  revalidatePath(`/projects/${project.id}`);
+  revalidatePath(`/projects/${project.id}/tasks/${taskId}/edit`);
+  revalidatePath(`/projects/${project.id}/sprints`);
 
-  redirect(`/projects/${projectId}`);
+  redirect(`/projects/${project.id}`);
 }

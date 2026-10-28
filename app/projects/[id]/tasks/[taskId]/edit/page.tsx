@@ -1,8 +1,9 @@
 
 import Link from "next/link";
 import { headers } from "next/headers";
-import { redirect, notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
+
 import { auth } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import { updateTask } from "./actions";
@@ -10,15 +11,20 @@ import { updateTask } from "./actions";
 export const instant = false;
 
 type EditTaskPageProps = {
-  params: Promise<{ id: string; taskId: string }>;
-  searchParams: Promise<{ error?: string }>;
+  params: Promise<{
+    id: string;
+    taskId: string;
+  }>;
+  searchParams: Promise<{
+    error?: string;
+  }>;
 };
 
 const statusOptions = [
   { value: "TODO", label: "À faire" },
   { value: "IN_PROGRESS", label: "En cours" },
   { value: "TO_REVIEW", label: "À revoir" },
-  { value: "DONE", label: "Fini" },
+  { value: "DONE", label: "Terminé" },
 ] as const;
 
 const priorityOptions = [
@@ -52,10 +58,11 @@ async function EditTaskContent({
     headers: await headers(),
   });
 
-  if (!session?.user) {
+  if (!session?.user?.id) {
     redirect("/login");
   }
 
+  // Charger le projet uniquement si l'utilisateur y a accès.
   const project = await prisma.project.findFirst({
     where: {
       id: projectId,
@@ -67,6 +74,7 @@ async function EditTaskContent({
     select: {
       id: true,
       name: true,
+      ownerId: true,
       owner: {
         select: {
           id: true,
@@ -88,14 +96,11 @@ async function EditTaskContent({
     notFound();
   }
 
+  // La tâche est directement liée au projet par projectId.
   const task = await prisma.task.findFirst({
     where: {
       id: taskId,
-      story: {
-        epic: {
-          projectId,
-        },
-      },
+      projectId: project.id,
     },
   });
 
@@ -103,12 +108,10 @@ async function EditTaskContent({
     notFound();
   }
 
-  // Les Stories disponibles dans les Epics de ce projet.
+  // Toutes les Stories du projet, y compris celles sans Epic.
   const stories = await prisma.story.findMany({
     where: {
-      epic: {
-        projectId,
-      },
+      projectId: project.id,
     },
     select: {
       id: true,
@@ -124,13 +127,38 @@ async function EditTaskContent({
     },
   });
 
-  // Le propriétaire et les membres du projet peuvent être assignés.
+  // Sprints du projet qui ne sont pas terminés.
+  const sprints = await prisma.sprint.findMany({
+    where: {
+      projectId: project.id,
+      status: {
+        not: "COMPLETED",
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  // Le propriétaire et les membres peuvent être assignés.
   const members = [
     project.owner,
     ...project.members.filter(
       (member) => member.id !== project.owner.id,
     ),
   ];
+
+  const errorMessages: Record<string, string> = {
+    invalid: "Vérifie le titre, la description et les champs sélectionnés.",
+    story: "La Story sélectionnée n'appartient pas à ce projet.",
+    sprint: "Le Sprint sélectionné n'appartient pas à ce projet.",
+    assignee: "La personne choisie n'est pas membre de ce projet.",
+  };
 
   return (
     <main className="mx-auto max-w-3xl p-6 md:p-8">
@@ -145,6 +173,7 @@ async function EditTaskContent({
         <h1 className="text-3xl font-bold text-slate-900">
           Modifier la tâche
         </h1>
+
         <p className="mt-2 text-sm text-slate-500">
           Projet : {project.name}
         </p>
@@ -155,13 +184,8 @@ async function EditTaskContent({
           role="alert"
           className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700"
         >
-          {query.error === "assignment"
-            ? "Choisis une personne ou un groupe, mais pas les deux."
-            : query.error === "assignee"
-              ? "La personne choisie n'est pas membre de ce projet."
-              : query.error === "story"
-                ? "La Story sélectionnée n'appartient pas à ce projet."
-                : "Vérifie les champs du formulaire."}
+          {errorMessages[query.error] ??
+            "Une erreur est survenue. Vérifie les informations saisies."}
         </p>
       )}
 
@@ -176,6 +200,7 @@ async function EditTaskContent({
           >
             Titre *
           </label>
+
           <input
             id="title"
             name="title"
@@ -193,6 +218,7 @@ async function EditTaskContent({
           >
             Description
           </label>
+
           <textarea
             id="description"
             name="description"
@@ -211,6 +237,7 @@ async function EditTaskContent({
             >
               Statut
             </label>
+
             <select
               id="status"
               name="status"
@@ -232,6 +259,7 @@ async function EditTaskContent({
             >
               Priorité
             </label>
+
             <select
               id="priority"
               name="priority"
@@ -254,6 +282,7 @@ async function EditTaskContent({
           >
             Type
           </label>
+
           <select
             id="type"
             name="type"
@@ -273,26 +302,57 @@ async function EditTaskContent({
             htmlFor="storyId"
             className="mb-2 block text-sm font-medium"
           >
-            Story associée *
+            Story associée
           </label>
+
           <select
             id="storyId"
             name="storyId"
-            required
-            defaultValue={task.storyId}
+            defaultValue={task.storyId ?? ""}
             className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3"
           >
+            <option value="">Aucune Story</option>
+
             {stories.map((story) => (
               <option key={story.id} value={story.id}>
-                {story.epic.name} — {story.title}
+                {story.epic?.name
+                  ? `${story.epic.name} — ${story.title}`
+                  : story.title}
               </option>
             ))}
           </select>
+
           {stories.length === 0 && (
-            <p className="mt-1 text-sm text-red-600">
-              Crée d'abord un Epic et une Story dans ce projet.
+            <p className="mt-1 text-sm text-slate-500">
+              Aucune Story disponible. Tu peux enregistrer la tâche sans
+              Story associée.
             </p>
           )}
+        </div>
+
+        <div>
+          <label
+            htmlFor="sprintId"
+            className="mb-2 block text-sm font-medium"
+          >
+            Sprint associé
+          </label>
+
+          <select
+            id="sprintId"
+            name="sprintId"
+            defaultValue={task.sprintId ?? ""}
+            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3"
+          >
+            <option value="">Aucun Sprint</option>
+
+            {sprints.map((sprint) => (
+              <option key={sprint.id} value={sprint.id}>
+                {sprint.name}
+                {sprint.status === "ACTIVE" ? " (En cours)" : ""}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div>
@@ -302,6 +362,7 @@ async function EditTaskContent({
           >
             Assigner à une personne
           </label>
+
           <select
             id="assigneeId"
             name="assigneeId"
@@ -309,6 +370,7 @@ async function EditTaskContent({
             className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3"
           >
             <option value="">Personne</option>
+
             {members.map((member) => (
               <option key={member.id} value={member.id}>
                 {member.name || member.email}
@@ -316,26 +378,6 @@ async function EditTaskContent({
               </option>
             ))}
           </select>
-        </div>
-
-        <div>
-          <label
-            htmlFor="assignedGroup"
-            className="mb-2 block text-sm font-medium"
-          >
-            Ou assigner à un groupe
-          </label>
-          <input
-            id="assignedGroup"
-            name="assignedGroup"
-            maxLength={100}
-            defaultValue={task.assignedGroup ?? ""}
-            placeholder="Ex. : Équipe Frontend"
-            className="w-full rounded-lg border border-slate-300 px-4 py-3"
-          />
-          <p className="mt-1 text-xs text-slate-500">
-            Pour une assignation à un groupe, laisse la personne vide.
-          </p>
         </div>
 
         <div className="flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-5">
@@ -348,8 +390,7 @@ async function EditTaskContent({
 
           <button
             type="submit"
-            disabled={stories.length === 0}
-            className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700"
           >
             Enregistrer
           </button>
