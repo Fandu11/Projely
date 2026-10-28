@@ -9,6 +9,8 @@ import Link from "next/link";
 import {
   updateBacklogEpic,
   updateBacklogStory,
+  deleteBacklogEpic,
+  deleteBacklogStory,
 } from "./actions";
 
 type BacklogTask = {
@@ -250,6 +252,29 @@ function StoryCard({
     setEditing(false);
   }
 
+  function removeStory() {
+    if (
+      !window.confirm(
+        `Supprimer la Story "${story.title}" ?`,
+      )
+    ) {
+      return;
+    }
+
+    setError("");
+
+    startTransition(async () => {
+      const result = await deleteBacklogStory(projectId, story.id);
+
+      if (!result.success) {
+        setError(result.error ?? "Erreur lors de la suppression.");
+        return;
+      }
+
+      router.refresh();
+    });
+  }
+
   return (
     <div className="overflow-hidden rounded-xl border border-sky-200 bg-white">
       <div className="border-b border-sky-100 bg-sky-50/80 p-3 sm:p-4">
@@ -309,6 +334,15 @@ function StoryCard({
                 className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isPending ? "Enregistrement..." : "Enregistrer"}
+              </button>
+
+              <button
+                type="button"
+                onClick={removeStory}
+                disabled={isPending}
+                className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+              >
+                Supprimer la Story
               </button>
 
               <button
@@ -412,6 +446,29 @@ function EpicCard({
     });
   }
 
+  function removeEpic() {
+    if (
+      !window.confirm(
+        `Supprimer l'Epic "${epic.name}" ?`,
+      )
+    ) {
+      return;
+    }
+
+    setError("");
+
+    startTransition(async () => {
+      const result = await deleteBacklogEpic(projectId, epic.id);
+
+      if (!result.success) {
+        setError(result.error ?? "Erreur lors de la suppression.");
+        return;
+      }
+
+      router.refresh();
+    });
+  }
+
   return (
     <section className="overflow-hidden rounded-xl border border-violet-200 bg-white shadow-sm">
       <div className="border-b border-violet-200 bg-violet-50 p-3 sm:p-4">
@@ -448,6 +505,15 @@ function EpicCard({
                 className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isPending ? "Enregistrement..." : "Enregistrer"}
+              </button>
+
+              <button
+                type="button"
+                onClick={removeEpic}
+                disabled={isPending}
+                className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+              >
+                Supprimer l'Epic
               </button>
 
               <button

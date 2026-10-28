@@ -517,3 +517,102 @@ export async function updateBacklogStory(
     };
   }
 }
+
+
+export async function deleteBacklogStory(
+  projectId: string,
+  storyId: string,
+) {
+  const allowed = await canEditProject(projectId);
+
+  if (!allowed) {
+    return {
+      success: false,
+      error: "Tu n'as pas le droit de modifier ce projet.",
+    };
+  }
+
+  const story = await prisma.story.findFirst({
+    where: {
+      id: storyId,
+      projectId,
+    },
+    include: {
+      tasks: {
+        select: { id: true },
+      },
+    },
+  });
+
+  if (!story) {
+    return {
+      success: false,
+      error: "Story introuvable.",
+    };
+  }
+
+  if (story.tasks.length > 0) {
+    return {
+      success: false,
+      error:
+        "Cette Story contient des tâches. Supprime ou déplace ses tâches avant de la supprimer.",
+    };
+  }
+
+  await prisma.story.delete({
+    where: { id: storyId },
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+
+  return { success: true };
+}
+
+export async function deleteBacklogEpic(
+  projectId: string,
+  epicId: string,
+) {
+  const allowed = await canEditProject(projectId);
+
+  if (!allowed) {
+    return {
+      success: false,
+      error: "Tu n'as pas le droit de modifier ce projet.",
+    };
+  }
+
+  const epic = await prisma.epic.findFirst({
+    where: {
+      id: epicId,
+      projectId,
+    },
+    include: {
+      stories: {
+        select: { id: true },
+      },
+    },
+  });
+
+  if (!epic) {
+    return {
+      success: false,
+      error: "Epic introuvable.",
+    };
+  }
+
+  if (epic.stories.length > 0) {
+    return {
+      success: false,
+      error:
+        "Cette Epic contient des Stories. Déplace ou supprime ses Stories avant de supprimer l'Epic.",
+    };
+  }
+
+  await prisma.epic.delete({
+    where: { id: epicId },
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+
+  return { success: true };
+}
