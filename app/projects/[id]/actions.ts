@@ -293,14 +293,23 @@ export type SprintActionState = {
   error?: string;
 };
 
+
 export async function createSprint(
   projectId: string,
-  _previousState: SprintActionState,
-  formData: FormData,
-): Promise<SprintActionState> {
+  stateOrFormData: SprintActionState | FormData,
+  maybeFormData?: FormData,
+): Promise<never> {
+  // Compatible avec un formulaire classique et useActionState.
+  const formData =
+    maybeFormData ??
+    (stateOrFormData instanceof FormData
+      ? stateOrFormData
+      : null);
 
-  const name = String(formData.get("name") ?? "").trim();
-  const goal = String(formData.get("goal") ?? "").trim();
+  if (!formData) {
+    redirect(`/projects/${projectId}?tab=sprints&error=invalid`);
+  }
+
   const session = await getSession();
 
   if (!session?.user) {
@@ -315,6 +324,9 @@ export async function createSprint(
   if (!project) {
     redirect("/projects");
   }
+
+  const name = String(formData.get("name") ?? "").trim();
+  const goal = String(formData.get("goal") ?? "").trim();
   const startDateValue = String(
     formData.get("startDate") ?? "",
   );
@@ -335,8 +347,7 @@ export async function createSprint(
     Number.isNaN(endDate.getTime()) ||
     endDate < startDate
   ) {
-    revalidatePath(`/projects/${projectId}`);
-    redirect(`/projects/${projectId}?tab=sprints`);
+    redirect(`/projects/${projectId}?tab=sprints&error=invalid`);
   }
 
   await prisma.sprint.create({
@@ -350,5 +361,8 @@ export async function createSprint(
   });
 
   revalidatePath(`/projects/${projectId}`);
-  redirect(`/projects/${projectId}`);
+
+  // Rester sur l'onglet Sprints après la création.
+  redirect(`/projects/${projectId}?tab=sprints`);
 }
+
