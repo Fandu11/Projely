@@ -1,9 +1,10 @@
 
+import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 
 import { auth } from "@/app/lib/auth";
-import {prisma} from "@/app/lib/prisma";
+import { prisma } from "@/app/lib/prisma";
 
 import { createProjectElement } from "./actions";
 
@@ -11,9 +12,7 @@ export const instant = false;
 
 type PageProps = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{
-    error?: string;
-  }>;
+  searchParams: Promise<{ error?: string }>;
 };
 
 const elementTypes = [
@@ -37,6 +36,14 @@ const priorities = [
   { value: "CRITICAL", label: "Critique" },
 ] as const;
 
+const errorMessages: Record<string, string> = {
+  invalid: "Certains champs sont invalides. Vérifie les informations saisies.",
+  parent:
+    "Le parent sélectionné est invalide ou n'appartient pas à ce projet.",
+  sprint: "Le Sprint sélectionné n'appartient pas à ce projet.",
+  assignee: "Le responsable sélectionné n'appartient pas à ce projet.",
+};
+
 export default async function NewProjectElementPage({
   params,
   searchParams,
@@ -44,32 +51,31 @@ export default async function NewProjectElementPage({
   const { id: projectId } = await params;
   const { error } = await searchParams;
 
+  // Authentification
   const session = await auth.api.getSession({
     headers: await headers(),
   });
 
-  if (!session?.user) {
+  if (!session?.user?.id) {
     redirect("/login");
   }
 
+  const userId = session.user.id;
+
+  // Chargement du projet et de ses éléments
   const project = await prisma.project.findFirst({
     where: {
       id: projectId,
       OR: [
-        { ownerId: session.user.id },
-        {
-          members: {
-            some: {
-              id: session.user.id,
-            },
-          },
-        },
+        { ownerId: userId },
+        { members: { some: { id: userId } } },
       ],
     },
     select: {
       id: true,
       name: true,
       ownerId: true,
+
       members: {
         select: {
           id: true,
@@ -77,33 +83,35 @@ export default async function NewProjectElementPage({
           email: true,
         },
       },
+
       epics: {
-        orderBy: {
-          createdAt: "desc",
-        },
+        orderBy: { createdAt: "desc" },
         select: {
           id: true,
           name: true,
-          stories: {
-            orderBy: {
-              createdAt: "desc",
-            },
+        },
+      },
+
+      // Toutes les Stories du projet, y compris celles sans Epic.
+      stories: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          title: true,
+          epicId: true,
+          epic: {
             select: {
-              id: true,
-              title: true,
+              name: true,
             },
           },
         },
       },
+
       sprints: {
         where: {
-          status: {
-            not: "COMPLETED",
-          },
+          status: { not: "COMPLETED" },
         },
-        orderBy: {
-          startDate: "asc",
-        },
+        orderBy: { startDate: "asc" },
         select: {
           id: true,
           name: true,
@@ -117,10 +125,9 @@ export default async function NewProjectElementPage({
     notFound();
   }
 
+  // Récupération du propriétaire
   const owner = await prisma.user.findUnique({
-    where: {
-      id: project.ownerId,
-    },
+    where: { id: project.ownerId },
     select: {
       id: true,
       name: true,
@@ -130,26 +137,22 @@ export default async function NewProjectElementPage({
 
   const users = [
     ...(owner ? [owner] : []),
-    ...project.members.filter((member) => member.id !== project.ownerId),
+    ...project.members.filter(
+      (member) => member.id !== project.ownerId,
+    ),
   ];
 
-  const errorMessages: Record<string, string> = {
-    invalid: "Certains champs sont invalides. Vérifie les informations saisies.",
-    parent:
-      "Le parent sélectionné ne correspond pas au type d'élément ou n'appartient pas à ce projet.",
-    sprint: "Le sprint sélectionné n'existe pas dans ce projet.",
-    assignee: "Le membre assigné ne fait pas partie de ce projet.",
-  };
+  const formAction = createProjectElement.bind(null, project.id);
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
       <div className="mb-8">
-        <a
+        <Link
           href={`/projects/${project.id}`}
           className="text-sm text-gray-500 transition hover:text-gray-900"
         >
           ← Retour au projet
-        </a>
+        </Link>
 
         <h1 className="mt-4 text-3xl font-bold tracking-tight text-gray-900">
           Créer un élément
@@ -174,9 +177,10 @@ export default async function NewProjectElementPage({
       )}
 
       <form
-        action={createProjectElement.bind(null, project.id)}
+        action={formAction}
         className="space-y-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm"
       >
+        {/* Type */}
         <div>
           <label
             htmlFor="type"
@@ -200,10 +204,12 @@ export default async function NewProjectElementPage({
           </select>
 
           <p className="mt-1.5 text-xs text-gray-500">
-            Tu peux laisser le parent vide pour créer un élément autonome.
+            Epic → aucun parent. Story → Epic facultatif. Task ou Bug →
+            Story facultative.
           </p>
         </div>
 
+        {/* Titre */}
         <div>
           <label
             htmlFor="title"
@@ -223,6 +229,7 @@ export default async function NewProjectElementPage({
           />
         </div>
 
+        {/* Description */}
         <div>
           <label
             htmlFor="description"
@@ -244,6 +251,7 @@ export default async function NewProjectElementPage({
           />
         </div>
 
+        {/* Parent */}
         <div>
           <label
             htmlFor="parentId"
@@ -272,22 +280,24 @@ export default async function NewProjectElementPage({
             </optgroup>
 
             <optgroup label="Stories">
-              {project.epics.flatMap((epic) =>
-                epic.stories.map((story) => (
-                  <option key={story.id} value={story.id}>
-                    {story.title} — {epic.name}
-                  </option>
-                )),
-              )}
+              {project.stories.map((story) => (
+                <option key={story.id} value={story.id}>
+                  {story.title}
+                  {story.epic
+                    ? ` — ${story.epic.name}`
+                    : " — sans Epic"}
+                </option>
+              ))}
             </optgroup>
           </select>
 
           <p className="mt-1.5 text-xs text-gray-500">
-            Story → Epic facultatif. Task ou Bug → Story facultative.
-            Epic → aucun parent.
+            Le serveur vérifie que le parent correspond au type choisi et
+            appartient bien au projet.
           </p>
         </div>
 
+        {/* Statut et priorité */}
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div>
             <label
@@ -334,6 +344,7 @@ export default async function NewProjectElementPage({
           </div>
         </div>
 
+        {/* Sprint */}
         <div>
           <label
             htmlFor="sprintId"
@@ -355,16 +366,13 @@ export default async function NewProjectElementPage({
 
             {project.sprints.map((sprint) => (
               <option key={sprint.id} value={sprint.id}>
-                {sprint.name} ({sprint.status.toLowerCase()})
+                {sprint.name} — {sprint.status.toLowerCase()}
               </option>
             ))}
           </select>
-
-          <p className="mt-1.5 text-xs text-gray-500">
-            Ce champ est utilisé uniquement pour les Tasks et les Bugs.
-          </p>
         </div>
 
+        {/* Responsable */}
         <div>
           <label
             htmlFor="assigneeId"
@@ -390,19 +398,16 @@ export default async function NewProjectElementPage({
               </option>
             ))}
           </select>
-
-          <p className="mt-1.5 text-xs text-gray-500">
-            L'assignation est utilisée uniquement pour les Tasks et les Bugs.
-          </p>
         </div>
 
+        {/* Actions */}
         <div className="flex flex-col-reverse gap-3 border-t border-gray-100 pt-5 sm:flex-row sm:justify-end">
-          <a
+          <Link
             href={`/projects/${project.id}`}
             className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
           >
             Annuler
-          </a>
+          </Link>
 
           <button
             type="submit"

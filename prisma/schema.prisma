@@ -8,10 +8,6 @@ datasource db {
   provider = "postgresql"
 }
 
-// ================================
-// UTILISATEURS
-// ================================
-
 model User {
   id            String   @id
   name          String
@@ -25,20 +21,14 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  sessions Session[]
-  accounts Account[]
-
-  assignedTasks Task[] @relation("TaskAssignee")
-
+  sessions      Session[]
+  accounts      Account[]
+  assignedTasks Task[]    @relation("TaskAssignee")
   ownedProjects Project[] @relation("ProjectOwner")
   memberOf      Project[] @relation("ProjectMembers")
 
   @@map("user")
 }
-
-// ================================
-// AUTHENTIFICATION
-// ================================
 
 model Session {
   id        String   @id
@@ -89,35 +79,25 @@ model Verification {
   @@map("verification")
 }
 
-// ================================
-// PROJETS
-// ================================
-
 model Project {
-  id          String  @id @default(cuid())
+  id          String   @id @default(cuid())
   name        String
-  description String? @db.Text
+  description String?  @db.Text
+  ownerId     String
 
-  ownerId String
-  owner   User   @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-
-  members User[] @relation("ProjectMembers")
+  owner   User     @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members User[]   @relation("ProjectMembers")
 
   sprints Sprint[]
   epics   Epic[]
-
-  // Toutes les Stories du projet, même sans Epic.
   stories Story[]
+  tasks   Task[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([ownerId])
 }
-
-// ================================
-// SPRINTS
-// ================================
 
 model Sprint {
   id        String       @id @default(cuid())
@@ -126,11 +106,10 @@ model Sprint {
   startDate DateTime
   endDate   DateTime
   status    SprintStatus @default(PLANNED)
-
   projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  tasks Task[]
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -139,18 +118,13 @@ model Sprint {
   @@index([projectId, status])
 }
 
-// ================================
-// EPICS
-// ================================
-
 model Epic {
-  id          String  @id @default(cuid())
+  id          String   @id @default(cuid())
   name        String
-  description String? @db.Text
+  description String?  @db.Text
+  projectId   String
 
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   stories Story[]
 
   createdAt DateTime @default(now())
@@ -159,26 +133,16 @@ model Epic {
   @@index([projectId])
 }
 
-// ================================
-// STORIES
-// Une Story appartient toujours à un projet.
-// Son Epic est facultatif.
-// ================================
-
 model Story {
-  id          String  @id @default(cuid())
+  id          String   @id @default(cuid())
   title       String
-  description String? @db.Text
+  description String?  @db.Text
+  projectId   String
+  epicId      String?
 
-  // Le projet est obligatoire, même sans Epic.
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  // Une Story peut être autonome, sans Epic.
-  epicId String?
-  epic   Epic? @relation(fields: [epicId], references: [id], onDelete: SetNull)
-
-  tasks Task[]
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  epic    Epic?   @relation(fields: [epicId], references: [id], onDelete: SetNull)
+  tasks   Task[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -186,11 +150,6 @@ model Story {
   @@index([projectId])
   @@index([epicId])
 }
-
-// ================================
-// TÂCHES ET BUGS
-// Le parent Story est facultatif.
-// ================================
 
 model Task {
   id          String       @id @default(cuid())
@@ -200,15 +159,17 @@ model Task {
   priority    TaskPriority @default(MEDIUM)
   type        TaskType     @default(TASK)
 
-  // Une Task ou un Bug peut être autonome.
+  // Chaque tâche ou bug appartient directement à un projet.
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Les relations Story et Sprint restent facultatives.
   storyId String?
   story   Story? @relation(fields: [storyId], references: [id], onDelete: SetNull)
 
-  // Le sprint est facultatif.
   sprintId String?
   sprint   Sprint? @relation(fields: [sprintId], references: [id], onDelete: SetNull)
 
-  // L'utilisateur assigné est facultatif.
   assigneeId String?
   assignee   User? @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
 
@@ -217,14 +178,13 @@ model Task {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([projectId])
+  @@index([projectId, status])
+  @@index([projectId, type])
   @@index([storyId, status])
   @@index([sprintId])
   @@index([assigneeId])
 }
-
-// ================================
-// ENUMS
-// ================================
 
 enum TaskStatus {
   TODO

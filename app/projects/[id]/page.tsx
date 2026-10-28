@@ -12,26 +12,10 @@ import ProjectTabs from "./ProjectTabs";
 export const instant = false;
 
 const columns = [
-  {
-    status: "TODO",
-    title: "À faire",
-    color: "border-slate-400",
-  },
-  {
-    status: "IN_PROGRESS",
-    title: "En cours",
-    color: "border-blue-500",
-  },
-  {
-    status: "TO_REVIEW",
-    title: "À revoir",
-    color: "border-amber-500",
-  },
-  {
-    status: "DONE",
-    title: "Fini",
-    color: "border-emerald-500",
-  },
+  { status: "TODO", title: "À faire", color: "border-slate-400" },
+  { status: "IN_PROGRESS", title: "En cours", color: "border-blue-500" },
+  { status: "TO_REVIEW", title: "À revoir", color: "border-amber-500" },
+  { status: "DONE", title: "Fini", color: "border-emerald-500" },
 ] as const;
 
 type ProjectPageProps = {
@@ -81,6 +65,7 @@ async function ProjectContent({
     redirect("/login");
   }
 
+  // Récupérer le projet seulement si l'utilisateur y a accès.
   const project = await prisma.project.findFirst({
     where: {
       id: projectId,
@@ -88,9 +73,7 @@ async function ProjectContent({
         { ownerId: session.user.id },
         {
           members: {
-            some: {
-              id: session.user.id,
-            },
+            some: { id: session.user.id },
           },
         },
       ],
@@ -110,28 +93,6 @@ async function ProjectContent({
           email: true,
         },
       },
-      epics: {
-        orderBy: { createdAt: "desc" },
-        include: {
-          stories: {
-            orderBy: { createdAt: "desc" },
-            include: {
-              tasks: {
-                orderBy: { createdAt: "desc" },
-                include: {
-                  assignee: {
-                    select: {
-                      id: true,
-                      name: true,
-                      email: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
       sprints: {
         orderBy: [
           { startDate: "desc" },
@@ -139,6 +100,7 @@ async function ProjectContent({
         ],
         include: {
           tasks: {
+            where: { projectId },
             orderBy: { createdAt: "asc" },
             select: {
               id: true,
@@ -161,29 +123,57 @@ async function ProjectContent({
     notFound();
   }
 
-  // Les tâches sont récupérées à travers les stories des epics.
-  const tasks = project.epics.flatMap((epic) =>
-    epic.stories.flatMap((story) =>
-      story.tasks.map((task) => ({
-        ...task,
-        storyTitle: story.title,
-        epicName: epic.name,
-      })),
-    ),
-  );
+  // Toutes les Stories du projet, y compris celles sans Epic.
+  const stories = await prisma.story.findMany({
+    where: { projectId: project.id },
+    orderBy: { createdAt: "desc" },
+    include: {
+      epic: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  });
 
-  // Toutes les stories du projet, pour le formulaire de création.
-  const stories = project.epics.flatMap((epic) =>
-    epic.stories.map((story) => ({
-      id: story.id,
-      title: story.title,
-      epicName: epic.name,
-    })),
-  );
+  // Point important : le filtre s'effectue directement sur projectId.
+  // Les tâches et Bugs ne dépendent donc pas d'une Story pour être trouvés.
+  const projectTasks = await prisma.task.findMany({
+    where: {
+      projectId: project.id,
+    },
+    orderBy: { createdAt: "desc" },
+    include: {
+      assignee: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      story: {
+        select: {
+          id: true,
+          title: true,
+          epic: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const tasks = projectTasks.map((task) => ({
+    ...task,
+    storyTitle: task.story?.title ?? "Aucune story",
+    epicName: task.story?.epic?.name ?? "Aucun epic",
+  }));
 
   return (
     <main className="min-w-0 p-6 md:p-8">
-      {/* En-tête du projet */}
       <header className="mb-8 mt-0">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -208,7 +198,6 @@ async function ProjectContent({
         </div>
       </header>
 
-      {/* Message d'erreur éventuel */}
       {query.error === "invalid" && (
         <p
           role="alert"
@@ -223,12 +212,11 @@ async function ProjectContent({
           role="status"
           className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
         >
-          Ce projet ne contient aucune story. Crée d'abord un epic, puis
-          une story, avant d'ajouter des tâches.
+          Ce projet ne contient aucune story. Crée une story avant d'ajouter
+          une tâche ou un Bug avec le formulaire rapide.
         </div>
       )}
 
-      {/* Onglets du projet et tableau Kanban */}
       <ProjectTabs
         projectId={project.id}
         currentUserId={session.user.id}
@@ -267,7 +255,6 @@ async function ProjectContent({
                   key={column.status}
                   className="min-w-0 rounded-xl bg-slate-100 p-3"
                 >
-                  {/* Titre de la colonne */}
                   <div
                     className={`mb-4 flex items-center justify-between border-t-4 ${column.color} pt-3`}
                   >
@@ -281,7 +268,6 @@ async function ProjectContent({
                   </div>
 
                   <div className="space-y-3">
-                    {/* Cartes de tâches */}
                     {columnTasks.map((task) => (
                       <Link
                         key={task.id}
@@ -299,7 +285,6 @@ async function ProjectContent({
                           </p>
                         )}
 
-                        {/* Type et priorité */}
                         <div className="mt-3 flex flex-wrap gap-2">
                           <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
                             {typeLabels[task.type]}
@@ -312,7 +297,6 @@ async function ProjectContent({
                           </span>
                         </div>
 
-                        {/* Story et epic associés */}
                         <div className="mt-3 break-words text-xs text-slate-500">
                           <p>
                             <span className="font-medium">Story :</span>{" "}
@@ -324,7 +308,6 @@ async function ProjectContent({
                           </p>
                         </div>
 
-                        {/* Assignation */}
                         <div className="mt-3 text-xs text-slate-500">
                           <span className="font-medium">Assigné à : </span>
                           {task.assignee?.name ||
@@ -333,7 +316,6 @@ async function ProjectContent({
                             "Personne"}
                         </div>
 
-                        {/* Date de création */}
                         <p className="mt-3 text-xs text-slate-400">
                           Créée le{" "}
                           {task.createdAt.toLocaleDateString("fr-FR")}
@@ -341,7 +323,6 @@ async function ProjectContent({
                       </Link>
                     ))}
 
-                    {/* Formulaire de création rapide */}
                     {stories.length > 0 ? (
                       <form
                         action={createTask.bind(null, project.id)}
@@ -373,9 +354,26 @@ async function ProjectContent({
 
                           {stories.map((story) => (
                             <option key={story.id} value={story.id}>
-                              {story.epicName} — {story.title}
+                              {story.epic?.name ?? "Sans epic"} — {story.title}
                             </option>
                           ))}
+                        </select>
+
+                        <label
+                          htmlFor={`type-${column.status}`}
+                          className="block text-xs font-medium text-slate-600"
+                        >
+                          Type
+                        </label>
+
+                        <select
+                          id={`type-${column.status}`}
+                          name="type"
+                          defaultValue="TASK"
+                          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500"
+                        >
+                          <option value="TASK">Tâche</option>
+                          <option value="BUG">Bug</option>
                         </select>
 
                         <label

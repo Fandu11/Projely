@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 import { auth } from "@/app/lib/auth";
-import {prisma} from "@/app/lib/prisma";
+import { prisma } from "@/app/lib/prisma";
 
 const elementTypes = ["EPIC", "STORY", "TASK", "BUG"] as const;
 const statuses = ["TODO", "IN_PROGRESS", "TO_REVIEW", "DONE"] as const;
@@ -20,32 +20,32 @@ function redirectWithError(projectId: string, error: string): never {
   redirect(`/projects/${projectId}/tasks/new?error=${error}`);
 }
 
+function getFormValue(formData: FormData, key: string): string {
+  return String(formData.get(key) ?? "").trim();
+}
+
 export async function createProjectElement(
   projectId: string,
   formData: FormData,
 ): Promise<void> {
-  // Vérification de l'authentification.
+  // 1. Authentification
   const session = await auth.api.getSession({
     headers: await headers(),
   });
 
-  if (!session?.user) {
+  if (!session?.user?.id) {
     redirect("/login");
   }
 
-  // Vérification de l'accès au projet.
+  const userId = session.user.id;
+
+  // 2. Vérification de l'accès au projet
   const project = await prisma.project.findFirst({
     where: {
       id: projectId,
       OR: [
-        { ownerId: session.user.id },
-        {
-          members: {
-            some: {
-              id: session.user.id,
-            },
-          },
-        },
+        { ownerId: userId },
+        { members: { some: { id: userId } } },
       ],
     },
     select: {
@@ -58,141 +58,120 @@ export async function createProjectElement(
     redirect("/projects");
   }
 
-  // Récupération des champs du formulaire.
-  const rawType = String(formData.get("type") ?? "").trim();
-  const title = String(formData.get("title") ?? "").trim();
-  const description =
-    String(formData.get("description") ?? "").trim() || null;
+  // 3. Lecture et validation des champs communs
+  const rawType = getFormValue(formData, "type");
+  const title = getFormValue(formData, "title");
+  const description = getFormValue(formData, "description") || null;
+  const parentId = getFormValue(formData, "parentId");
 
-  const parentId = String(formData.get("parentId") ?? "").trim();
-  const rawStatus = String(formData.get("status") ?? "TODO").trim();
-  const rawPriority = String(formData.get("priority") ?? "MEDIUM").trim();
-
-  const sprintId = String(formData.get("sprintId") ?? "").trim();
-  const assigneeId = String(formData.get("assigneeId") ?? "").trim();
-
-  // Validation générale.
   if (
     !elementTypes.includes(rawType as ElementType) ||
     title.length === 0 ||
     title.length > 200 ||
     (description !== null && description.length > 5000)
   ) {
-    redirectWithError(projectId, "invalid");
+    redirectWithError(project.id, "invalid");
   }
 
   const type = rawType as ElementType;
 
-  // Le statut et la priorité ne s'appliquent qu'aux Tasks et aux Bugs.
+  const rawStatus = getFormValue(formData, "status") || "TODO";
+  const rawPriority = getFormValue(formData, "priority") || "MEDIUM";
+  const sprintId = getFormValue(formData, "sprintId");
+  const assigneeId = getFormValue(formData, "assigneeId");
+
+  const isTaskOrBug = type === "TASK" || type === "BUG";
+
+  // 4. Les champs de tâche ne s'appliquent qu'aux Tasks et aux Bugs
   if (
-    (type === "TASK" || type === "BUG") &&
+    isTaskOrBug &&
     (!statuses.includes(rawStatus as TaskStatus) ||
       !priorities.includes(rawPriority as TaskPriority))
   ) {
-    redirectWithError(projectId, "invalid");
+    redirectWithError(project.id, "invalid");
   }
 
-  // Un Epic ne possède pas de parent dans le schéma actuel.
+  if (!isTaskOrBug && (sprintId || assigneeId)) {
+    // Ces champs ne doivent pas être utilisés pour les Epics et Stories.
+    redirectWithError(project.id, "invalid");
+  }
+
+  // 5. Validation du parent selon le type d'élément
   if (type === "EPIC" && parentId) {
-    redirectWithError(projectId, "parent");
+    redirectWithError(project.id, "parent");
   }
 
-  // Le parent est facultatif.
-  // S'il est renseigné, on vérifie son type et son appartenance au projet.
-  if (parentId && type === "STORY") {
-    const parentEpic = await prisma.epic.findFirst({
+  let validParentId: string | null = null;
+
+  if (type === "STORY" && parentId) {
+    // Une Story peut être rattachée à un Epic du même projet.
+    const epic = await prisma.epic.findFirst({
       where: {
         id: parentId,
         projectId: project.id,
       },
-      select: {
-        id: true,
-      },
+      select: { id: true },
     });
 
-    if (!parentEpic) {
-      redirectWithError(projectId, "parent");
+    if (!epic) {
+      redirectWithError(project.id, "parent");
     }
+
+    validParentId = epic.id;
   }
 
-  if (parentId && (type === "TASK" || type === "BUG")) {
-    const parentStory = await prisma.story.findFirst({
+  if (isTaskOrBug && parentId) {
+    // Une Task ou un Bug peut être rattaché à une Story du même projet,
+    // même si cette Story n'est associée à aucun Epic.
+    const story = await prisma.story.findFirst({
       where: {
         id: parentId,
-        epic: {
-          projectId: project.id,
-        },
+        projectId: project.id,
       },
-      select: {
-        id: true,
-      },
+      select: { id: true },
     });
 
-    // Une Story sans Epic est également autorisée.
-    // Le filtre précédent ne trouve pas ces Stories sans Epic.
-    // On vérifie donc aussi les Stories autonomes.
-    const standaloneStory =
-      parentStory ??
-      (await prisma.story.findFirst({
-        where: {
-          id: parentId,
-          epicId: null,
-        },
-        select: {
-          id: true,
-        },
-      }));
-
-    if (!standaloneStory) {
-      redirectWithError(projectId, "parent");
+    if (!story) {
+      redirectWithError(project.id, "parent");
     }
+
+    validParentId = story.id;
   }
 
-  // Sprint et assignation : uniquement pour les Tasks et les Bugs.
-  const supportsTaskFields = type === "TASK" || type === "BUG";
-
-  if (supportsTaskFields && sprintId) {
+  // 6. Validation du Sprint
+  if (isTaskOrBug && sprintId) {
     const sprint = await prisma.sprint.findFirst({
       where: {
         id: sprintId,
         projectId: project.id,
       },
-      select: {
-        id: true,
-      },
+      select: { id: true },
     });
 
     if (!sprint) {
-      redirectWithError(projectId, "sprint");
+      redirectWithError(project.id, "sprint");
     }
   }
 
-  if (supportsTaskFields && assigneeId) {
-    const member = await prisma.user.findFirst({
+  // 7. Validation du responsable
+  if (isTaskOrBug && assigneeId) {
+    const assignee = await prisma.user.findFirst({
       where: {
         id: assigneeId,
         OR: [
           { id: project.ownerId },
-          {
-            memberOf: {
-              some: {
-                id: project.id,
-              },
-            },
-          },
+          { memberOf: { some: { id: project.id } } },
         ],
       },
-      select: {
-        id: true,
-      },
+      select: { id: true },
     });
 
-    if (!member) {
-      redirectWithError(projectId, "assignee");
+    if (!assignee) {
+      redirectWithError(project.id, "assignee");
     }
   }
 
-  // Création selon le type choisi.
+  // 8. Création de l'élément
   if (type === "EPIC") {
     await prisma.epic.create({
       data: {
@@ -207,7 +186,7 @@ export async function createProjectElement(
         title,
         description,
         projectId: project.id,
-        epicId: parentId || null,
+        epicId: validParentId,
       },
     });
   } else {
@@ -218,14 +197,19 @@ export async function createProjectElement(
         type,
         status: rawStatus as TaskStatus,
         priority: rawPriority as TaskPriority,
-        storyId: parentId || null,
+
+        // Important : le projet est obligatoire dans ton schéma Prisma.
+        projectId: project.id,
+
+        // Une Story est facultative dans le schéma actuel.
+        storyId: validParentId,
         sprintId: sprintId || null,
         assigneeId: assigneeId || null,
       },
     });
   }
 
-  // Actualisation des pages concernées.
+  // 9. Actualisation des pages
   revalidatePath(`/projects/${project.id}`);
   revalidatePath(`/projects/${project.id}/tasks/new`);
   revalidatePath(`/projects/${project.id}/sprints`);

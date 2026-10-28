@@ -15,49 +15,48 @@ const allowedStatuses = [
   "DONE",
 ] as const;
 
-type TaskStatus = (typeof allowedStatuses)[number];
+const allowedTypes = ["TASK", "BUG"] as const;
 
-type AddMemberState = {
-  success?: string;
-  error?: string;
-};
-
-export type SprintFormState = {
-  error?: string;
-};
-
-/**
- * Crée une tâche ou un bug associé à une story du projet.
- */
-export async function createTask(
-  projectId: string,
-  formData: FormData,
-): Promise<never> {
-  const session = await auth.api.getSession({
+async function getSession() {
+  return auth.api.getSession({
     headers: await headers(),
   });
+}
 
-  if (!session?.user) {
-    redirect("/login");
-  }
-
-  // Vérifier que l'utilisateur a accès au projet.
-  const project = await prisma.project.findFirst({
+async function getAccessibleProject(projectId: string, userId: string) {
+  return prisma.project.findFirst({
     where: {
       id: projectId,
       OR: [
-        { ownerId: session.user.id },
+        { ownerId: userId },
         {
           members: {
-            some: { id: session.user.id },
+            some: { id: userId },
           },
         },
       ],
     },
     select: {
       id: true,
+      ownerId: true,
     },
   });
+}
+
+export async function createTask(
+  projectId: string,
+  formData: FormData,
+) {
+  const session = await getSession();
+
+  if (!session?.user) {
+    redirect("/login");
+  }
+
+  const project = await getAccessibleProject(
+    projectId,
+    session.user.id,
+  );
 
   if (!project) {
     redirect("/projects");
@@ -67,31 +66,37 @@ export async function createTask(
   const description = String(
     formData.get("description") ?? "",
   ).trim();
-
-  const rawStatus = String(formData.get("status") ?? "TODO");
+  const status = String(formData.get("status") ?? "TODO");
+  const type = String(formData.get("type") ?? "TASK");
   const storyId = String(formData.get("storyId") ?? "").trim();
 
-  // Valider les données reçues.
+  const isValidStatus = allowedStatuses.some(
+    (value) => value === status,
+  );
+  const isValidType = allowedTypes.some(
+    (value) => value === type,
+  );
+
   if (
     title.length < 1 ||
     title.length > 150 ||
     description.length > 2000 ||
-    !allowedStatuses.includes(rawStatus as TaskStatus) ||
+    !isValidStatus ||
+    !isValidType ||
     !storyId
   ) {
     redirect(`/projects/${projectId}?error=invalid`);
   }
 
-  // Vérifier que la story appartient bien à ce projet.
+  // Vérifie que la Story appartient au projet courant.
   const story = await prisma.story.findFirst({
     where: {
       id: storyId,
-      epic: {
-        projectId: project.id,
-      },
+      projectId: project.id,
     },
     select: {
       id: true,
+      projectId: true,
     },
   });
 
@@ -99,16 +104,68 @@ export async function createTask(
     redirect(`/projects/${projectId}?error=invalid`);
   }
 
-  // Créer la tâche via sa relation obligatoire avec la story.
   await prisma.task.create({
     data: {
       title,
       description: description || null,
-      status: rawStatus as TaskStatus,
-      story: {
-        connect: {
-          id: story.id,
-        },
+      status: status as (typeof allowedStatuses)[number],
+      type: type as (typeof allowedTypes)[number],
+
+      // L'identifiant vient du projet autorisé côté serveur.
+      projectId: project.id,
+
+      storyId: story.id,
+    },
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+  redirect(`/projects/${projectId}`);
+}
+
+export async function addProjectMember(
+  projectId: string,
+  formData: FormData,
+) {
+  const session = await getSession();
+
+  if (!session?.user) {
+    redirect("/login");
+  }
+
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      ownerId: session.user.id,
+    },
+    select: { id: true },
+  });
+
+  if (!project) {
+    redirect(`/projects/${projectId}?error=forbidden`);
+  }
+
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (!email || email.length > 254) {
+    redirect(`/projects/${projectId}?error=invalid`);
+  }
+
+  const member = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true },
+  });
+
+  if (!member) {
+    redirect(`/projects/${projectId}?error=member-not-found`);
+  }
+
+  await prisma.project.update({
+    where: { id: project.id },
+    data: {
+      members: {
+        connect: { id: member.id },
       },
     },
   });
@@ -117,110 +174,14 @@ export async function createTask(
   redirect(`/projects/${projectId}`);
 }
 
-/**
- * Ajoute un utilisateur comme membre du projet.
- * Seul le propriétaire peut effectuer cette opération.
- */
-export async function addProjectMember(
-  projectId: string,
-  _previousState: AddMemberState,
-  formData: FormData,
-): Promise<AddMemberState> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  if (!session?.user) {
-    return { error: "Vous devez être connecté." };
-  }
-
-  const project = await prisma.project.findFirst({
-    where: {
-      id: projectId,
-      ownerId: session.user.id,
-    },
-    select: {
-      id: true,
-      members: {
-        select: { id: true },
-      },
-    },
-  });
-
-  if (!project) {
-    return {
-      error: "Projet introuvable ou vous n'êtes pas propriétaire.",
-    };
-  }
-
-  const email = String(formData.get("email") ?? "")
-    .trim()
-    .toLowerCase();
-
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return {
-      error: "Veuillez saisir une adresse e-mail valide.",
-    };
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { email },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-    },
-  });
-
-  if (!user) {
-    return {
-      error: "Aucun utilisateur inscrit ne possède cet e-mail.",
-    };
-  }
-
-  if (user.id === session.user.id) {
-    return {
-      error: "Vous êtes déjà propriétaire du projet.",
-    };
-  }
-
-  if (project.members.some((member) => member.id === user.id)) {
-    return {
-      error: "Cet utilisateur est déjà membre du projet.",
-    };
-  }
-
-  await prisma.project.update({
-    where: { id: project.id },
-    data: {
-      members: {
-        connect: { id: user.id },
-      },
-    },
-  });
-
-  revalidatePath(`/projects/${projectId}`);
-
-  return {
-    success: `${user.name || user.email} a été ajouté au projet.`,
-  };
-}
-
-/**
- * Retire un membre du projet.
- * Seul le propriétaire peut effectuer cette opération.
- */
 export async function removeProjectMember(
   projectId: string,
-  memberId: string,
-  _formData: FormData,
-): Promise<void> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
+  formData: FormData,
+) {
+  const session = await getSession();
 
   if (!session?.user) {
-    throw new Error("Vous devez être connecté.");
+    redirect("/login");
   }
 
   const project = await prisma.project.findFirst({
@@ -228,30 +189,19 @@ export async function removeProjectMember(
       id: projectId,
       ownerId: session.user.id,
     },
-    select: {
-      id: true,
-      ownerId: true,
-      members: {
-        where: { id: memberId },
-        select: { id: true },
-      },
-    },
+    select: { id: true },
   });
 
   if (!project) {
-    throw new Error(
-      "Projet introuvable ou vous n'êtes pas propriétaire.",
-    );
+    redirect(`/projects/${projectId}?error=forbidden`);
   }
 
-  if (memberId === project.ownerId) {
-    throw new Error(
-      "Le propriétaire ne peut pas être retiré du projet.",
-    );
-  }
+  const memberId = String(
+    formData.get("memberId") ?? "",
+  ).trim();
 
-  if (project.members.length === 0) {
-    throw new Error("Cet utilisateur n'est pas membre du projet.");
+  if (!memberId || memberId === session.user.id) {
+    redirect(`/projects/${projectId}?error=invalid`);
   }
 
   await prisma.project.update({
@@ -264,80 +214,51 @@ export async function removeProjectMember(
   });
 
   revalidatePath(`/projects/${projectId}`);
+  redirect(`/projects/${projectId}`);
 }
 
-/**
- * Crée un sprint dans un projet.
- */
 export async function createSprint(
   projectId: string,
-  _previousState: SprintFormState,
   formData: FormData,
-): Promise<SprintFormState> {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
+) {
+  const session = await getSession();
 
   if (!session?.user) {
     redirect("/login");
   }
 
-  const project = await prisma.project.findFirst({
-    where: {
-      id: projectId,
-      OR: [
-        { ownerId: session.user.id },
-        {
-          members: {
-            some: { id: session.user.id },
-          },
-        },
-      ],
-    },
-    select: { id: true },
-  });
+  const project = await getAccessibleProject(
+    projectId,
+    session.user.id,
+  );
 
   if (!project) {
-    return {
-      error: "Projet introuvable ou accès non autorisé.",
-    };
+    redirect("/projects");
   }
 
   const name = String(formData.get("name") ?? "").trim();
   const goal = String(formData.get("goal") ?? "").trim();
-  const startValue = String(formData.get("startDate") ?? "");
-  const endValue = String(formData.get("endDate") ?? "");
+  const startDateValue = String(
+    formData.get("startDate") ?? "",
+  );
+  const endDateValue = String(
+    formData.get("endDate") ?? "",
+  );
 
-  if (!name || name.length > 100) {
-    return {
-      error: "Le nom doit contenir entre 1 et 100 caractères.",
-    };
-  }
-
-  if (goal.length > 1000) {
-    return {
-      error: "L'objectif ne doit pas dépasser 1 000 caractères.",
-    };
-  }
-
-  if (!startValue || !endValue) {
-    return {
-      error: "Renseigne la date de début et la date de fin.",
-    };
-  }
-
-  const startDate = new Date(`${startValue}T00:00:00.000Z`);
-  const endDate = new Date(`${endValue}T23:59:59.999Z`);
+  const startDate = new Date(startDateValue);
+  const endDate = new Date(endDateValue);
 
   if (
+    name.length < 1 ||
+    name.length > 150 ||
+    goal.length > 2000 ||
+    !startDateValue ||
+    !endDateValue ||
     Number.isNaN(startDate.getTime()) ||
     Number.isNaN(endDate.getTime()) ||
-    startDate > endDate
+    endDate < startDate
   ) {
-    return {
-      error:
-        "La date de fin doit être égale ou postérieure à la date de début.",
-    };
+    redirect(`/projects/${projectId}?error=invalid`);
   }
 
   await prisma.sprint.create({
@@ -347,12 +268,9 @@ export async function createSprint(
       startDate,
       endDate,
       projectId: project.id,
-      status: "PLANNED",
     },
   });
 
   revalidatePath(`/projects/${projectId}`);
-  revalidatePath(`/projects/${projectId}/sprints`);
-
-  redirect(`/projects/${projectId}/sprints`);
+  redirect(`/projects/${projectId}`);
 }
