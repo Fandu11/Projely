@@ -7,7 +7,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 import BacklogSection from "./BacklogSection";
-import SprintsSection from "./SprintsSection";
+import SprintsSection from "./SprintsSection";7
+import ProjectSettings from "./ProjectSettings";
 
 import {
   addProjectMember,
@@ -86,6 +87,8 @@ type ProjectTabsProps = {
   epics: BacklogEpic[];
   standaloneStories: BacklogStory[];
   standaloneTasks: BacklogTask[];
+  projectName: string;
+  projectDescription: string | null;
 };
 
 const tabs = [
@@ -131,6 +134,8 @@ const priorityColors: Record<ProjectTask["priority"], string> = {
 
 export default function ProjectTabs({
   projectId,
+  projectName,
+  projectDescription,
   currentUserId,
   ownerId,
   owner,
@@ -399,15 +404,12 @@ export default function ProjectTabs({
       )}
 
       {activeTab === "settings" && (
-        <div className="rounded-xl border border-slate-200 p-8 text-center">
-          <h2 className="text-lg font-semibold">
-            Paramètres du projet
-          </h2>
-
-          <p className="mt-2 text-sm text-slate-500">
-            Les paramètres du projet seront disponibles ici.
-          </p>
-        </div>
+        <ProjectSettings
+          projectId={projectId}
+          projectName={projectName}
+          projectDescription={projectDescription}
+          isOwner={currentUserId === ownerId}
+        />
       )}
     </div>
   );

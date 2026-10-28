@@ -298,6 +298,8 @@ async function ProjectContent({
 
       <ProjectTabs
         projectId={project.id}
+        projectName={project.name}
+        projectDescription={project.description}
         currentUserId={session.user.id}
         ownerId={project.ownerId}
         owner={project.owner}
