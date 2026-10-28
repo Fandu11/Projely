@@ -1,49 +1,48 @@
 
-import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
-import { Suspense } from "react";
+
 import { auth } from "@/app/lib/auth";
-import { prisma } from "@/app/lib/prisma";
-import { createTask } from "./actions";
+import {prisma} from "@/app/lib/prisma";
+
+import { createProjectElement } from "./actions";
 
 export const instant = false;
 
 type PageProps = {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{
+    error?: string;
+  }>;
 };
 
-const taskTypes = [
+const elementTypes = [
   { value: "EPIC", label: "Epic" },
   { value: "STORY", label: "Story" },
-  { value: "TASK", label: "Tâche" },
+  { value: "TASK", label: "Task" },
   { value: "BUG", label: "Bug" },
 ] as const;
 
-const taskStatuses = [
+const statuses = [
   { value: "TODO", label: "À faire" },
   { value: "IN_PROGRESS", label: "En cours" },
-  { value: "TO_REVIEW", label: "À revoir" },
-  { value: "DONE", label: "Terminée" },
+  { value: "TO_REVIEW", label: "À vérifier" },
+  { value: "DONE", label: "Terminé" },
 ] as const;
 
-const taskPriorities = [
+const priorities = [
   { value: "LOW", label: "Faible" },
   { value: "MEDIUM", label: "Moyenne" },
   { value: "HIGH", label: "Haute" },
   { value: "CRITICAL", label: "Critique" },
 ] as const;
 
-export default function NewTaskPage(props: PageProps) {
-  return (
-    <Suspense fallback={<NewTaskFallback />}>
-      <NewTaskContent {...props} />
-    </Suspense>
-  );
-}
-
-async function NewTaskContent({ params }: PageProps) {
+export default async function NewProjectElementPage({
+  params,
+  searchParams,
+}: PageProps) {
   const { id: projectId } = await params;
+  const { error } = await searchParams;
 
   const session = await auth.api.getSession({
     headers: await headers(),
@@ -58,7 +57,13 @@ async function NewTaskContent({ params }: PageProps) {
       id: projectId,
       OR: [
         { ownerId: session.user.id },
-        { members: { some: { id: session.user.id } } },
+        {
+          members: {
+            some: {
+              id: session.user.id,
+            },
+          },
+        },
       ],
     },
     select: {
@@ -73,12 +78,16 @@ async function NewTaskContent({ params }: PageProps) {
         },
       },
       epics: {
-        orderBy: { createdAt: "desc" },
+        orderBy: {
+          createdAt: "desc",
+        },
         select: {
           id: true,
           name: true,
           stories: {
-            orderBy: { createdAt: "desc" },
+            orderBy: {
+              createdAt: "desc",
+            },
             select: {
               id: true,
               title: true,
@@ -87,7 +96,14 @@ async function NewTaskContent({ params }: PageProps) {
         },
       },
       sprints: {
-        orderBy: { startDate: "desc" },
+        where: {
+          status: {
+            not: "COMPLETED",
+          },
+        },
+        orderBy: {
+          startDate: "asc",
+        },
         select: {
           id: true,
           name: true,
@@ -101,127 +117,193 @@ async function NewTaskContent({ params }: PageProps) {
     notFound();
   }
 
+  const owner = await prisma.user.findUnique({
+    where: {
+      id: project.ownerId,
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  });
+
   const users = [
-    ...project.members,
-    ...(project.members.some((member) => member.id === project.ownerId)
-      ? []
-      : await prisma.user.findMany({
-          where: { id: project.ownerId },
-          select: { id: true, name: true, email: true },
-        })),
+    ...(owner ? [owner] : []),
+    ...project.members.filter((member) => member.id !== project.ownerId),
   ];
 
-  const possibleParents = project.epics.flatMap((epic) => [
-    {
-      id: epic.id,
-      label: `Epic — ${epic.name}`,
-    },
-    ...epic.stories.map((story) => ({
-      id: story.id,
-      label: `Story — ${story.title}`,
-    })),
-  ]);
+  const errorMessages: Record<string, string> = {
+    invalid: "Certains champs sont invalides. Vérifie les informations saisies.",
+    parent:
+      "Le parent sélectionné ne correspond pas au type d'élément ou n'appartient pas à ce projet.",
+    sprint: "Le sprint sélectionné n'existe pas dans ce projet.",
+    assignee: "Le membre assigné ne fait pas partie de ce projet.",
+  };
 
   return (
-    <main className="mx-auto max-w-3xl p-6 md:p-8">
-      <Link
-        href={`/projects/${project.id}`}
-        className="text-sm text-slate-600 hover:text-indigo-600"
-      >
-        ← Retour au projet
-      </Link>
+    <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
+      <div className="mb-8">
+        <a
+          href={`/projects/${project.id}`}
+          className="text-sm text-gray-500 transition hover:text-gray-900"
+        >
+          ← Retour au projet
+        </a>
 
-      <header className="mb-8 mt-6">
-        <p className="text-sm font-medium text-indigo-600">{project.name}</p>
-        <h1 className="mt-2 text-3xl font-bold text-slate-900">
+        <h1 className="mt-4 text-3xl font-bold tracking-tight text-gray-900">
           Créer un élément
         </h1>
-        <p className="mt-2 text-slate-600">
-          Crée un Epic, une Story, une tâche ou un bug pour ce projet.
+
+        <p className="mt-2 text-sm text-gray-600">
+          Projet : <span className="font-medium">{project.name}</span>
         </p>
-      </header>
+
+        <p className="mt-1 text-sm text-gray-500">
+          Crée un Epic, une Story, une Task ou un Bug.
+        </p>
+      </div>
+
+      {error && errorMessages[error] && (
+        <div
+          role="alert"
+          className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+        >
+          {errorMessages[error]}
+        </div>
+      )}
 
       <form
-        action={createTask.bind(null, project.id)}
-        className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+        action={createProjectElement.bind(null, project.id)}
+        className="space-y-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm"
       >
         <div>
           <label
             htmlFor="type"
-            className="mb-2 block text-sm font-medium text-slate-700"
+            className="mb-2 block text-sm font-medium text-gray-700"
           >
-            Type
+            Type d'élément
           </label>
+
           <select
             id="type"
             name="type"
             defaultValue="TASK"
             required
-            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           >
-            {taskTypes.map((type) => (
+            {elementTypes.map((type) => (
               <option key={type.value} value={type.value}>
                 {type.label}
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-slate-500">
-            Le type détermine la place de cet élément dans la hiérarchie.
+
+          <p className="mt-1.5 text-xs text-gray-500">
+            Tu peux laisser le parent vide pour créer un élément autonome.
           </p>
         </div>
 
         <div>
           <label
             htmlFor="title"
-            className="mb-2 block text-sm font-medium text-slate-700"
+            className="mb-2 block text-sm font-medium text-gray-700"
           >
-            Titre *
+            Titre
           </label>
+
           <input
             id="title"
             name="title"
             type="text"
             required
-            minLength={1}
-            maxLength={150}
-            placeholder="Ex. Ajouter l'authentification"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            maxLength={200}
+            placeholder="Ex. : Créer le système d'authentification"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           />
         </div>
 
         <div>
           <label
             htmlFor="description"
-            className="mb-2 block text-sm font-medium text-slate-700"
+            className="mb-2 block text-sm font-medium text-gray-700"
           >
             Description
+            <span className="ml-1 font-normal text-gray-400">
+              (facultatif)
+            </span>
           </label>
+
           <textarea
             id="description"
             name="description"
-            rows={5}
-            maxLength={2000}
-            placeholder="Décris le besoin, le travail à réaliser ou le problème rencontré..."
-            className="w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            rows={4}
+            maxLength={5000}
+            placeholder="Décris l'objectif et les détails de cet élément..."
+            className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           />
         </div>
 
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div>
+          <label
+            htmlFor="parentId"
+            className="mb-2 block text-sm font-medium text-gray-700"
+          >
+            Élément parent
+            <span className="ml-1 font-normal text-gray-400">
+              (facultatif)
+            </span>
+          </label>
+
+          <select
+            id="parentId"
+            name="parentId"
+            defaultValue=""
+            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          >
+            <option value="">Aucun parent</option>
+
+            <optgroup label="Epics">
+              {project.epics.map((epic) => (
+                <option key={epic.id} value={epic.id}>
+                  {epic.name}
+                </option>
+              ))}
+            </optgroup>
+
+            <optgroup label="Stories">
+              {project.epics.flatMap((epic) =>
+                epic.stories.map((story) => (
+                  <option key={story.id} value={story.id}>
+                    {story.title} — {epic.name}
+                  </option>
+                )),
+              )}
+            </optgroup>
+          </select>
+
+          <p className="mt-1.5 text-xs text-gray-500">
+            Story → Epic facultatif. Task ou Bug → Story facultative.
+            Epic → aucun parent.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div>
             <label
               htmlFor="status"
-              className="mb-2 block text-sm font-medium text-slate-700"
+              className="mb-2 block text-sm font-medium text-gray-700"
             >
               Statut
             </label>
+
             <select
               id="status"
               name="status"
               defaultValue="TODO"
-              required
-              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-indigo-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             >
-              {taskStatuses.map((status) => (
+              {statuses.map((status) => (
                 <option key={status.value} value={status.value}>
                   {status.label}
                 </option>
@@ -232,18 +314,18 @@ async function NewTaskContent({ params }: PageProps) {
           <div>
             <label
               htmlFor="priority"
-              className="mb-2 block text-sm font-medium text-slate-700"
+              className="mb-2 block text-sm font-medium text-gray-700"
             >
               Priorité
             </label>
+
             <select
               id="priority"
               name="priority"
               defaultValue="MEDIUM"
-              required
-              className="w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-indigo-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             >
-              {taskPriorities.map((priority) => (
+              {priorities.map((priority) => (
                 <option key={priority.value} value={priority.value}>
                   {priority.label}
                 </option>
@@ -254,101 +336,82 @@ async function NewTaskContent({ params }: PageProps) {
 
         <div>
           <label
-            htmlFor="parentTaskId"
-            className="mb-2 block text-sm font-medium text-slate-700"
+            htmlFor="sprintId"
+            className="mb-2 block text-sm font-medium text-gray-700"
           >
-            Élément parent
+            Sprint
+            <span className="ml-1 font-normal text-gray-400">
+              (facultatif)
+            </span>
           </label>
+
           <select
-            id="parentTaskId"
-            name="parentTaskId"
+            id="sprintId"
+            name="sprintId"
             defaultValue=""
-            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-indigo-500"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           >
-            <option value="">Aucun parent</option>
-            {possibleParents.map((parent) => (
-              <option key={parent.id} value={parent.id}>
-                {parent.label}
+            <option value="">Aucun sprint</option>
+
+            {project.sprints.map((sprint) => (
+              <option key={sprint.id} value={sprint.id}>
+                {sprint.name} ({sprint.status.toLowerCase()})
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-slate-500">
-            Tu peux laisser ce champ vide. Les règles de hiérarchie sont
-            vérifiées lors de l'enregistrement.
+
+          <p className="mt-1.5 text-xs text-gray-500">
+            Ce champ est utilisé uniquement pour les Tasks et les Bugs.
           </p>
         </div>
 
         <div>
           <label
-            htmlFor="sprintId"
-            className="mb-2 block text-sm font-medium text-slate-700"
-          >
-            Sprint
-          </label>
-          <select
-            id="sprintId"
-            name="sprintId"
-            defaultValue=""
-            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-indigo-500"
-          >
-            <option value="">Aucun sprint</option>
-            {project.sprints.map((sprint) => (
-              <option key={sprint.id} value={sprint.id}>
-                {sprint.name}
-                {sprint.status === "ACTIVE" ? " (En cours)" : ""}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label
             htmlFor="assigneeId"
-            className="mb-2 block text-sm font-medium text-slate-700"
+            className="mb-2 block text-sm font-medium text-gray-700"
           >
-            Responsable
+            Assigné à
+            <span className="ml-1 font-normal text-gray-400">
+              (facultatif)
+            </span>
           </label>
+
           <select
             id="assigneeId"
             name="assigneeId"
             defaultValue=""
-            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-indigo-500"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           >
             <option value="">Personne</option>
+
             {users.map((user) => (
               <option key={user.id} value={user.id}>
-                {user.name || user.email}
+                {user.name} ({user.email})
               </option>
             ))}
           </select>
+
+          <p className="mt-1.5 text-xs text-gray-500">
+            L'assignation est utilisée uniquement pour les Tasks et les Bugs.
+          </p>
         </div>
 
-        <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
-          <Link
+        <div className="flex flex-col-reverse gap-3 border-t border-gray-100 pt-5 sm:flex-row sm:justify-end">
+          <a
             href={`/projects/${project.id}`}
-            className="rounded-lg border border-slate-300 px-4 py-2.5 text-center text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
           >
             Annuler
-          </Link>
+          </a>
 
           <button
             type="submit"
-            className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700"
+            className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           >
             Créer l'élément
           </button>
         </div>
       </form>
-    </main>
-  );
-}
-
-function NewTaskFallback() {
-  return (
-    <main className="mx-auto max-w-3xl p-6 md:p-8">
-      <div className="h-5 w-32 animate-pulse rounded bg-slate-200" />
-      <div className="mt-8 h-10 w-64 animate-pulse rounded bg-slate-200" />
-      <div className="mt-6 h-[40rem] animate-pulse rounded-2xl border border-slate-200 bg-white" />
     </main>
   );
 }

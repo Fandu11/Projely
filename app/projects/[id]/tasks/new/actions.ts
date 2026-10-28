@@ -4,28 +4,27 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+
 import { auth } from "@/app/lib/auth";
-import { prisma } from "@/app/lib/prisma";
+import {prisma} from "@/app/lib/prisma";
 
-const taskTypes = ["EPIC", "STORY", "TASK", "BUG"] as const;
-const taskStatuses = ["TODO", "IN_PROGRESS", "TO_REVIEW", "DONE"] as const;
-const taskPriorities = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
+const elementTypes = ["EPIC", "STORY", "TASK", "BUG"] as const;
+const statuses = ["TODO", "IN_PROGRESS", "TO_REVIEW", "DONE"] as const;
+const priorities = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
 
-type TaskType = (typeof taskTypes)[number];
-type TaskStatus = (typeof taskStatuses)[number];
-type TaskPriority = (typeof taskPriorities)[number];
+type ElementType = (typeof elementTypes)[number];
+type TaskStatus = (typeof statuses)[number];
+type TaskPriority = (typeof priorities)[number];
 
-function isOneOf<T extends string>(
-  value: string,
-  values: readonly T[],
-): value is T {
-  return values.some((item) => item === value);
+function redirectWithError(projectId: string, error: string): never {
+  redirect(`/projects/${projectId}/tasks/new?error=${error}`);
 }
 
-export async function createTask(
+export async function createProjectElement(
   projectId: string,
   formData: FormData,
 ): Promise<void> {
+  // Vérification de l'authentification.
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -34,18 +33,24 @@ export async function createTask(
     redirect("/login");
   }
 
+  // Vérification de l'accès au projet.
   const project = await prisma.project.findFirst({
     where: {
       id: projectId,
       OR: [
         { ownerId: session.user.id },
-        { members: { some: { id: session.user.id } } },
+        {
+          members: {
+            some: {
+              id: session.user.id,
+            },
+          },
+        },
       ],
     },
     select: {
       id: true,
       ownerId: true,
-      members: { select: { id: true } },
     },
   });
 
@@ -53,98 +58,177 @@ export async function createTask(
     redirect("/projects");
   }
 
+  // Récupération des champs du formulaire.
+  const rawType = String(formData.get("type") ?? "").trim();
   const title = String(formData.get("title") ?? "").trim();
-  const description = String(formData.get("description") ?? "").trim();
-  const rawType = String(formData.get("type") ?? "TASK");
-  const rawStatus = String(formData.get("status") ?? "TODO");
-  const rawPriority = String(formData.get("priority") ?? "MEDIUM");
-  const parentTaskId = String(formData.get("parentTaskId") ?? "").trim();
+  const description =
+    String(formData.get("description") ?? "").trim() || null;
+
+  const parentId = String(formData.get("parentId") ?? "").trim();
+  const rawStatus = String(formData.get("status") ?? "TODO").trim();
+  const rawPriority = String(formData.get("priority") ?? "MEDIUM").trim();
+
   const sprintId = String(formData.get("sprintId") ?? "").trim();
   const assigneeId = String(formData.get("assigneeId") ?? "").trim();
 
+  // Validation générale.
   if (
-    !title ||
-    title.length > 150 ||
-    description.length > 2000 ||
-    !isOneOf(rawType, taskTypes) ||
-    !isOneOf(rawStatus, taskStatuses) ||
-    !isOneOf(rawPriority, taskPriorities)
+    !elementTypes.includes(rawType as ElementType) ||
+    title.length === 0 ||
+    title.length > 200 ||
+    (description !== null && description.length > 5000)
   ) {
-    redirect(`/projects/${projectId}/tasks/new?error=invalid`);
+    redirectWithError(projectId, "invalid");
   }
 
-  const type: TaskType = rawType;
-  const status: TaskStatus = rawStatus;
-  const priority: TaskPriority = rawPriority;
+  const type = rawType as ElementType;
 
-  // Vérifier le parent et respecter la hiérarchie.
-  if (parentTaskId) {
-    const parent = await prisma.task.findFirst({
+  // Le statut et la priorité ne s'appliquent qu'aux Tasks et aux Bugs.
+  if (
+    (type === "TASK" || type === "BUG") &&
+    (!statuses.includes(rawStatus as TaskStatus) ||
+      !priorities.includes(rawPriority as TaskPriority))
+  ) {
+    redirectWithError(projectId, "invalid");
+  }
+
+  // Un Epic ne possède pas de parent dans le schéma actuel.
+  if (type === "EPIC" && parentId) {
+    redirectWithError(projectId, "parent");
+  }
+
+  // Le parent est facultatif.
+  // S'il est renseigné, on vérifie son type et son appartenance au projet.
+  if (parentId && type === "STORY") {
+    const parentEpic = await prisma.epic.findFirst({
       where: {
-        id: parentTaskId,
-        projectId,
+        id: parentId,
+        projectId: project.id,
       },
       select: {
         id: true,
-        type: true,
       },
     });
 
-    if (!parent) {
-      redirect(`/projects/${projectId}/tasks/new?error=parent`);
-    }
-
-    const validParent =
-      (type === "STORY" && parent.type === "EPIC") ||
-      ((type === "TASK" || type === "BUG") &&
-        (parent.type === "EPIC" || parent.type === "STORY"));
-
-    if (!validParent) {
-      redirect(`/projects/${projectId}/tasks/new?error=parent`);
+    if (!parentEpic) {
+      redirectWithError(projectId, "parent");
     }
   }
 
-  // Vérifier que le sprint appartient au projet.
-  if (sprintId) {
+  if (parentId && (type === "TASK" || type === "BUG")) {
+    const parentStory = await prisma.story.findFirst({
+      where: {
+        id: parentId,
+        epic: {
+          projectId: project.id,
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    // Une Story sans Epic est également autorisée.
+    // Le filtre précédent ne trouve pas ces Stories sans Epic.
+    // On vérifie donc aussi les Stories autonomes.
+    const standaloneStory =
+      parentStory ??
+      (await prisma.story.findFirst({
+        where: {
+          id: parentId,
+          epicId: null,
+        },
+        select: {
+          id: true,
+        },
+      }));
+
+    if (!standaloneStory) {
+      redirectWithError(projectId, "parent");
+    }
+  }
+
+  // Sprint et assignation : uniquement pour les Tasks et les Bugs.
+  const supportsTaskFields = type === "TASK" || type === "BUG";
+
+  if (supportsTaskFields && sprintId) {
     const sprint = await prisma.sprint.findFirst({
       where: {
         id: sprintId,
-        projectId,
+        projectId: project.id,
       },
-      select: { id: true },
+      select: {
+        id: true,
+      },
     });
 
     if (!sprint) {
-      redirect(`/projects/${projectId}/tasks/new?error=sprint`);
+      redirectWithError(projectId, "sprint");
     }
   }
 
-  // Le responsable doit être le propriétaire ou un membre du projet.
-  if (assigneeId) {
-    const isOwner = assigneeId === project.ownerId;
-    const isMember = project.members.some(
-      (member) => member.id === assigneeId,
-    );
+  if (supportsTaskFields && assigneeId) {
+    const member = await prisma.user.findFirst({
+      where: {
+        id: assigneeId,
+        OR: [
+          { id: project.ownerId },
+          {
+            memberOf: {
+              some: {
+                id: project.id,
+              },
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+      },
+    });
 
-    if (!isOwner && !isMember) {
-      redirect(`/projects/${projectId}/tasks/new?error=assignee`);
+    if (!member) {
+      redirectWithError(projectId, "assignee");
     }
   }
 
-  await prisma.task.create({
-    data: {
-      title,
-      description: description || null,
-      type,
-      status,
-      priority,
-      projectId,
-      parentTaskId: parentTaskId || null,
-      sprintId: sprintId || null,
-      assigneeId: assigneeId || null,
-    },
-  });
+  // Création selon le type choisi.
+  if (type === "EPIC") {
+    await prisma.epic.create({
+      data: {
+        name: title,
+        description,
+        projectId: project.id,
+      },
+    });
+  } else if (type === "STORY") {
+    await prisma.story.create({
+      data: {
+        title,
+        description,
+        projectId: project.id,
+        epicId: parentId || null,
+      },
+    });
+  } else {
+    await prisma.task.create({
+      data: {
+        title,
+        description,
+        type,
+        status: rawStatus as TaskStatus,
+        priority: rawPriority as TaskPriority,
+        storyId: parentId || null,
+        sprintId: sprintId || null,
+        assigneeId: assigneeId || null,
+      },
+    });
+  }
 
-  revalidatePath(`/projects/${projectId}`);
-  redirect(`/projects/${projectId}`);
+  // Actualisation des pages concernées.
+  revalidatePath(`/projects/${project.id}`);
+  revalidatePath(`/projects/${project.id}/tasks/new`);
+  revalidatePath(`/projects/${project.id}/sprints`);
+
+  redirect(`/projects/${project.id}`);
 }
