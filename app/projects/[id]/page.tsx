@@ -94,13 +94,17 @@ async function ProjectContent({
       },
       sprints: {
         orderBy: [
-          { startDate: "desc" },
-          { createdAt: "desc" },
+          { startDate: "asc" },
+          { endDate: "asc" },
         ],
         include: {
           tasks: {
-            where: { projectId },
-            orderBy: { createdAt: "asc" },
+            where: {
+              projectId,
+            },
+            orderBy: {
+              createdAt: "asc",
+            },
             select: {
               id: true,
               title: true,
@@ -111,7 +115,9 @@ async function ProjectContent({
             },
           },
           _count: {
-            select: { tasks: true },
+            select: {
+              tasks: true,
+            },
           },
         },
       },
@@ -124,8 +130,12 @@ async function ProjectContent({
 
   // Toutes les Stories du projet, y compris celles sans Epic.
   const stories = await prisma.story.findMany({
-    where: { projectId: project.id },
-    orderBy: { createdAt: "desc" },
+    where: {
+      projectId: project.id,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
     include: {
       epic: {
         select: {
@@ -136,13 +146,14 @@ async function ProjectContent({
     },
   });
 
-  // Charger les tâches directement par projectId.
-  // Une tâche peut exister sans Story associée.
+  // Charger toutes les tâches du projet, y compris celles sans Story.
   const projectTasks = await prisma.task.findMany({
     where: {
       projectId: project.id,
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: {
+      createdAt: "desc",
+    },
     include: {
       assignee: {
         select: {
@@ -212,6 +223,16 @@ async function ProjectContent({
         ownerId={project.ownerId}
         owner={project.owner}
         members={project.members}
+        allTasks={tasks.map((task) => ({
+          id: task.id,
+          title: task.title,
+          status: task.status,
+          type: task.type,
+          priority: task.priority,
+          storyTitle: task.storyTitle,
+          epicName: task.epicName,
+          sprintId: task.sprintId,
+        }))}
         sprints={project.sprints.map((sprint) => ({
           id: sprint.id,
           name: sprint.name,

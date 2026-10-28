@@ -1,10 +1,10 @@
 
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect } from "react";
+import Link from "next/link";
 
 import {
   addProjectMember,
@@ -20,6 +20,38 @@ type ProjectMember = {
   email: string;
 };
 
+type SprintTask = {
+  id: string;
+  title: string;
+  type: "TASK" | "BUG";
+  status: "TODO" | "IN_PROGRESS" | "TO_REVIEW" | "DONE";
+  priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  storyId: string | null;
+};
+
+type ProjectSprint = {
+  id: string;
+  name: string;
+  goal: string | null;
+  startDate: string;
+  endDate: string;
+  status: "PLANNED" | "ACTIVE" | "COMPLETED";
+  totalTasks: number;
+  completedTasks: number;
+  tasks: SprintTask[];
+};
+
+type ProjectTask = {
+  id: string;
+  title: string;
+  status: "TODO" | "IN_PROGRESS" | "TO_REVIEW" | "DONE";
+  type: "TASK" | "BUG";
+  priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  storyTitle: string;
+  epicName: string;
+  sprintId: string | null;
+};
+
 type ProjectTabsProps = {
   projectId: string;
   currentUserId: string;
@@ -27,16 +59,8 @@ type ProjectTabsProps = {
   owner: ProjectMember;
   members: ProjectMember[];
   tasksContent: ReactNode;
-  sprints: {
-    id: string;
-    name: string;
-    goal: string | null;
-    startDate: string;
-    endDate: string;
-    status: "PLANNED" | "ACTIVE" | "COMPLETED";
-    totalTasks: number;
-    completedTasks: number;
-  }[];
+  sprints: ProjectSprint[];
+  allTasks: ProjectTask[];
 };
 
 const tabs = [
@@ -51,6 +75,34 @@ type TabId = (typeof tabs)[number]["id"];
 
 const initialMemberState: MemberActionState = {};
 
+const statusLabels: Record<ProjectTask["status"], string> = {
+  TODO: "À faire",
+  IN_PROGRESS: "En cours",
+  TO_REVIEW: "À revoir",
+  DONE: "Terminée",
+};
+
+const priorityLabels: Record<ProjectTask["priority"], string> = {
+  LOW: "Faible",
+  MEDIUM: "Moyenne",
+  HIGH: "Haute",
+  CRITICAL: "Critique",
+};
+
+const statusColors: Record<ProjectTask["status"], string> = {
+  TODO: "bg-slate-100 text-slate-700",
+  IN_PROGRESS: "bg-blue-100 text-blue-700",
+  TO_REVIEW: "bg-amber-100 text-amber-700",
+  DONE: "bg-emerald-100 text-emerald-700",
+};
+
+const priorityColors: Record<ProjectTask["priority"], string> = {
+  LOW: "text-slate-500",
+  MEDIUM: "text-blue-600",
+  HIGH: "text-orange-600",
+  CRITICAL: "text-red-600",
+};
+
 export default function ProjectTabs({
   projectId,
   currentUserId,
@@ -59,8 +111,8 @@ export default function ProjectTabs({
   members,
   tasksContent,
   sprints,
+  allTasks,
 }: ProjectTabsProps) {
-
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -87,13 +139,13 @@ export default function ProjectTabs({
       })),
   ];
 
-  const [
-    memberState,
-    memberFormAction,
-    isAddingMember,
-  ] = useActionState(
+  const [memberState, memberFormAction, isAddingMember] = useActionState(
     addProjectMember.bind(null, projectId),
     initialMemberState,
+  );
+
+  const unassignedTasks = allTasks.filter(
+    (task) => task.sprintId === null,
   );
 
   return (
@@ -121,9 +173,7 @@ export default function ProjectTabs({
                 ? "border-blue-600 text-blue-700"
                 : "border-transparent text-slate-500 hover:text-slate-900"
             }`}
-            aria-current={
-              activeTab === tab.id ? "page" : undefined
-            }
+            aria-current={activeTab === tab.id ? "page" : undefined}
           >
             {tab.label}
           </button>
@@ -133,20 +183,67 @@ export default function ProjectTabs({
       {activeTab === "tasks" && tasksContent}
 
       {activeTab === "sprints" && (
-        <SprintsSection
-          projectId={projectId}
-          sprints={sprints.map((sprint) => ({
-            ...sprint,
-            tasks: [],
-          }))}
-        />
+        <div className="space-y-8">
+          {/* Chaque sprint reçoit maintenant ses propres tâches. */}
+          <SprintsSection
+            projectId={projectId}
+            sprints={sprints}
+          />
+
+          {/* Tâches qui ne sont associées à aucun sprint. */}
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div className="border-b border-slate-200 px-4 py-4">
+              <h2 className="text-lg font-semibold text-slate-900">
+                Toutes les tâches
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                {unassignedTasks.length} tâche(s) sans sprint
+              </p>
+            </div>
+
+            {unassignedTasks.length === 0 ? (
+              <p className="p-5 text-sm text-slate-500">
+                Aucune tâche sans sprint pour le moment.
+              </p>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {unassignedTasks.map((task) => (
+                  <Link
+                    key={task.id}
+                    href={`/projects/${projectId}/tasks/${task.id}/edit`}
+                    className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 transition hover:bg-slate-50"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900">
+                      {task.title}
+                    </span>
+
+                    <span className="text-xs text-slate-500">
+                      {task.type === "BUG" ? "Bug" : "Tâche"}
+                    </span>
+
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusColors[task.status]}`}
+                    >
+                      {statusLabels[task.status]}
+                    </span>
+
+                    <span
+                      className={`text-xs font-medium ${priorityColors[task.priority]}`}
+                    >
+                      {priorityLabels[task.priority]}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
       )}
 
       {activeTab === "calendar" && (
         <div className="rounded-xl border border-slate-200 p-8 text-center">
-          <h2 className="text-lg font-semibold">
-            Vue calendrier
-          </h2>
+          <h2 className="text-lg font-semibold">Vue calendrier</h2>
           <p className="mt-2 text-sm text-slate-500">
             La vue calendrier sera disponible ici.
           </p>
@@ -192,26 +289,18 @@ export default function ProjectTabs({
                   disabled={isAddingMember}
                   className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {isAddingMember
-                    ? "Ajout..."
-                    : "Ajouter"}
+                  {isAddingMember ? "Ajout..." : "Ajouter"}
                 </button>
               </div>
 
               {memberState.error && (
-                <p
-                  role="alert"
-                  className="mt-3 text-sm text-red-600"
-                >
+                <p role="alert" className="mt-3 text-sm text-red-600">
                   {memberState.error}
                 </p>
               )}
 
               {memberState.success && (
-                <p
-                  role="status"
-                  className="mt-3 text-sm text-green-700"
-                >
+                <p role="status" className="mt-3 text-sm text-green-700">
                   {memberState.success}
                 </p>
               )}
@@ -225,9 +314,7 @@ export default function ProjectTabs({
                 className="flex items-center gap-3 py-4"
               >
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-100 font-semibold text-blue-700">
-                  {(member.name || member.email)
-                    .charAt(0)
-                    .toUpperCase()}
+                  {(member.name || member.email).charAt(0).toUpperCase()}
                 </div>
 
                 <div className="min-w-0 flex-1">
@@ -244,39 +331,35 @@ export default function ProjectTabs({
                   {member.role}
                 </span>
 
-                {currentUserId === ownerId &&
-                  member.id !== ownerId && (
-                    <form
-                      action={removeProjectMember.bind(
-                        null,
-                        projectId,
-                      )}
-                      onSubmit={(event) => {
-                        const confirmed = window.confirm(
-                          `Retirer ${
-                            member.name || member.email
-                          } de ce projet ?`,
-                        );
+                {currentUserId === ownerId && member.id !== ownerId && (
+                  <form
+                    action={removeProjectMember.bind(null, projectId)}
+                    onSubmit={(event) => {
+                      const confirmed = window.confirm(
+                        `Retirer ${
+                          member.name || member.email
+                        } de ce projet ?`,
+                      );
 
-                        if (!confirmed) {
-                          event.preventDefault();
-                        }
-                      }}
+                      if (!confirmed) {
+                        event.preventDefault();
+                      }
+                    }}
+                  >
+                    <input
+                      type="hidden"
+                      name="memberId"
+                      value={member.id}
+                    />
+
+                    <button
+                      type="submit"
+                      className="rounded-lg px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
                     >
-                      <input
-                        type="hidden"
-                        name="memberId"
-                        value={member.id}
-                      />
-
-                      <button
-                        type="submit"
-                        className="rounded-lg px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
-                      >
-                        Retirer
-                      </button>
-                    </form>
-                  )}
+                      Retirer
+                    </button>
+                  </form>
+                )}
               </div>
             ))}
           </div>

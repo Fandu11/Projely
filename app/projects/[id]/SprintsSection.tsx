@@ -13,10 +13,10 @@ type SprintStatus = "PLANNED" | "ACTIVE" | "COMPLETED";
 type SprintTask = {
   id: string;
   title: string;
-  type: TaskType;
-  status: TaskStatus;
-  priority: TaskPriority;
-  parentTaskId: string | null;
+  type: "TASK" | "BUG";
+  status: "TODO" | "IN_PROGRESS" | "TO_REVIEW" | "DONE";
+  priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  storyId: string | null;
 };
 
 type SprintData = {
@@ -99,36 +99,6 @@ function sortTasks(tasks: SprintTask[]): SprintTask[] {
   });
 }
 
-function getTaskTree(tasks: SprintTask[]): {
-  roots: SprintTask[];
-  childrenByParent: Map<string, SprintTask[]>;
-} {
-  const taskIds = new Set(tasks.map((task) => task.id));
-  const childrenByParent = new Map<string, SprintTask[]>();
-  const roots: SprintTask[] = [];
-
-  for (const task of tasks) {
-    // Si le parent n'est pas dans ce sprint, la tâche devient une racine.
-    if (!task.parentTaskId || !taskIds.has(task.parentTaskId)) {
-      roots.push(task);
-      continue;
-    }
-
-    const siblings = childrenByParent.get(task.parentTaskId) ?? [];
-    siblings.push(task);
-    childrenByParent.set(task.parentTaskId, siblings);
-  }
-
-  return {
-    roots: sortTasks(roots),
-    childrenByParent: new Map(
-      [...childrenByParent.entries()].map(([parentId, children]) => [
-        parentId,
-        sortTasks(children),
-      ]),
-    ),
-  };
-}
 
 function TaskTree({
   projectId,
@@ -137,57 +107,41 @@ function TaskTree({
   projectId: string;
   tasks: SprintTask[];
 }) {
-  const { roots, childrenByParent } = getTaskTree(tasks);
-  const visited = new Set<string>();
+  const sortedTasks = [...tasks].sort((a, b) => {
+    const typeOrder: Record<SprintTask["type"], number> = {
+      TASK: 0,
+      BUG: 1,
+    };
 
-  function renderTask(task: SprintTask, depth = 0): React.ReactNode {
-    // Protection contre les cycles accidentels dans la hiérarchie.
-    if (visited.has(task.id)) {
-      return null;
+    const typeDifference = typeOrder[a.type] - typeOrder[b.type];
+
+    if (typeDifference !== 0) {
+      return typeDifference;
     }
 
-    visited.add(task.id);
+    return a.title.localeCompare(b.title, "fr");
+  });
 
-    const children = childrenByParent.get(task.id) ?? [];
+  const taskTypeLabels: Record<SprintTask["type"], string> = {
+    TASK: "Tâche",
+    BUG: "Bug",
+  };
 
-    return (
-      <li key={task.id} className="list-none">
-        <div
-          className="flex flex-col gap-2 rounded-lg border border-gray-200 p-3 sm:flex-row sm:items-center sm:justify-between"
-          style={{ marginLeft: `${Math.min(depth, 5) * 16}px` }}
-        >
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
-                {taskTypeLabels[task.type]}
-              </span>
+  const taskStatusLabels: Record<SprintTask["status"], string> = {
+    TODO: "À faire",
+    IN_PROGRESS: "En cours",
+    TO_REVIEW: "À vérifier",
+    DONE: "Terminée",
+  };
 
-              <Link
-                href={`/projects/${projectId}/tasks/${task.id}/edit`}
-                className="break-words font-medium text-gray-900 hover:text-blue-600 hover:underline"
-              >
-                {task.title}
-              </Link>
-            </div>
+  const taskPriorityLabels: Record<SprintTask["priority"], string> = {
+    LOW: "Basse",
+    MEDIUM: "Moyenne",
+    HIGH: "Haute",
+    CRITICAL: "Critique",
+  };
 
-            <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-600">
-              <span>{taskStatusLabels[task.status]}</span>
-              <span aria-hidden="true">·</span>
-              <span>Priorité : {taskPriorityLabels[task.priority]}</span>
-            </div>
-          </div>
-        </div>
-
-        {children.length > 0 && (
-          <ul className="mt-2 space-y-2">
-            {children.map((child) => renderTask(child, depth + 1))}
-          </ul>
-        )}
-      </li>
-    );
-  }
-
-  if (tasks.length === 0) {
+  if (sortedTasks.length === 0) {
     return (
       <p className="mt-4 text-sm text-gray-500">
         Aucune tâche associée à ce sprint pour le moment.
@@ -197,10 +151,35 @@ function TaskTree({
 
   return (
     <ul className="mt-4 space-y-2">
-      {roots.map((task) => renderTask(task))}
+      {sortedTasks.map((task) => (
+        <li key={task.id}>
+          <Link
+            href={`/projects/${projectId}/tasks/${task.id}/edit`}
+            className="flex flex-col gap-2 rounded-lg border border-gray-200 p-3 transition hover:border-blue-300 hover:bg-gray-50 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
+                {taskTypeLabels[task.type]}
+              </span>
+
+              <span className="break-words font-medium text-gray-900">
+                {task.title}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-3 text-xs text-gray-600">
+              <span>{taskStatusLabels[task.status]}</span>
+              <span>
+                Priorité : {taskPriorityLabels[task.priority]}
+              </span>
+            </div>
+          </Link>
+        </li>
+      ))}
     </ul>
   );
 }
+
 
 export default function SprintsSection({
   projectId,
