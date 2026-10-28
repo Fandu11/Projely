@@ -68,11 +68,15 @@ export async function createTask(
   ).trim();
   const status = String(formData.get("status") ?? "TODO");
   const type = String(formData.get("type") ?? "TASK");
-  const storyId = String(formData.get("storyId") ?? "").trim();
+
+  // La Story est facultative.
+  const storyId =
+    String(formData.get("storyId") ?? "").trim() || null;
 
   const isValidStatus = allowedStatuses.some(
     (value) => value === status,
   );
+
   const isValidType = allowedTypes.some(
     (value) => value === type,
   );
@@ -82,26 +86,26 @@ export async function createTask(
     title.length > 150 ||
     description.length > 2000 ||
     !isValidStatus ||
-    !isValidType ||
-    !storyId
+    !isValidType
   ) {
     redirect(`/projects/${projectId}?error=invalid`);
   }
 
-  // Vérifie que la Story appartient au projet courant.
-  const story = await prisma.story.findFirst({
-    where: {
-      id: storyId,
-      projectId: project.id,
-    },
-    select: {
-      id: true,
-      projectId: true,
-    },
-  });
+  // Si une Story est indiquée, vérifier qu'elle appartient au projet.
+  if (storyId) {
+    const story = await prisma.story.findFirst({
+      where: {
+        id: storyId,
+        projectId: project.id,
+      },
+      select: {
+        id: true,
+      },
+    });
 
-  if (!story) {
-    redirect(`/projects/${projectId}?error=invalid`);
+    if (!story) {
+      redirect(`/projects/${projectId}?error=invalid`);
+    }
   }
 
   await prisma.task.create({
@@ -110,11 +114,8 @@ export async function createTask(
       description: description || null,
       status: status as (typeof allowedStatuses)[number],
       type: type as (typeof allowedTypes)[number],
-
-      // L'identifiant vient du projet autorisé côté serveur.
       projectId: project.id,
-
-      storyId: story.id,
+      storyId,
     },
   });
 

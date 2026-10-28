@@ -65,7 +65,6 @@ async function ProjectContent({
     redirect("/login");
   }
 
-  // Récupérer le projet seulement si l'utilisateur y a accès.
   const project = await prisma.project.findFirst({
     where: {
       id: projectId,
@@ -137,8 +136,8 @@ async function ProjectContent({
     },
   });
 
-  // Point important : le filtre s'effectue directement sur projectId.
-  // Les tâches et Bugs ne dépendent donc pas d'une Story pour être trouvés.
+  // Charger les tâches directement par projectId.
+  // Une tâche peut exister sans Story associée.
   const projectTasks = await prisma.task.findMany({
     where: {
       projectId: project.id,
@@ -203,18 +202,8 @@ async function ProjectContent({
           role="alert"
           className="mb-5 rounded-lg bg-red-50 p-3 text-sm text-red-700"
         >
-          Vérifie le titre, la description, le statut et la story associée.
+          Vérifie le titre, la description et le statut de la tâche.
         </p>
-      )}
-
-      {stories.length === 0 && (
-        <div
-          role="status"
-          className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
-        >
-          Ce projet ne contient aucune story. Crée une story avant d'ajouter
-          une tâche ou un Bug avec le formulaire rapide.
-        </div>
       )}
 
       <ProjectTabs
@@ -302,6 +291,7 @@ async function ProjectContent({
                             <span className="font-medium">Story :</span>{" "}
                             {task.storyTitle}
                           </p>
+
                           <p className="mt-1">
                             <span className="font-medium">Epic :</span>{" "}
                             {task.epicName}
@@ -312,7 +302,6 @@ async function ProjectContent({
                           <span className="font-medium">Assigné à : </span>
                           {task.assignee?.name ||
                             task.assignee?.email ||
-                            task.assignedGroup ||
                             "Personne"}
                         </div>
 
@@ -323,104 +312,74 @@ async function ProjectContent({
                       </Link>
                     ))}
 
-                    {stories.length > 0 ? (
-                      <form
-                        action={createTask.bind(null, project.id)}
-                        className="space-y-2 rounded-lg border border-dashed border-slate-300 bg-white/70 p-3"
+                    {/* Création rapide sans Story obligatoire */}
+                    <form
+                      action={createTask.bind(null, project.id)}
+                      className="space-y-2 rounded-lg border border-dashed border-slate-300 bg-white/70 p-3"
+                    >
+                      <input
+                        type="hidden"
+                        name="status"
+                        value={column.status}
+                      />
+
+                      <label
+                        htmlFor={`type-${column.status}`}
+                        className="block text-xs font-medium text-slate-600"
                       >
-                        <input
-                          type="hidden"
-                          name="status"
-                          value={column.status}
-                        />
+                        Type
+                      </label>
 
-                        <label
-                          htmlFor={`story-${column.status}`}
-                          className="block text-xs font-medium text-slate-600"
-                        >
-                          Story associée
-                        </label>
+                      <select
+                        id={`type-${column.status}`}
+                        name="type"
+                        defaultValue="TASK"
+                        className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500"
+                      >
+                        <option value="TASK">Tâche</option>
+                        <option value="BUG">Bug</option>
+                      </select>
 
-                        <select
-                          id={`story-${column.status}`}
-                          name="storyId"
-                          required
-                          defaultValue=""
-                          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                        >
-                          <option value="" disabled>
-                            Choisir une story
-                          </option>
+                      <label
+                        htmlFor={`title-${column.status}`}
+                        className="block text-xs font-medium text-slate-600"
+                      >
+                        Titre
+                      </label>
 
-                          {stories.map((story) => (
-                            <option key={story.id} value={story.id}>
-                              {story.epic?.name ?? "Sans epic"} — {story.title}
-                            </option>
-                          ))}
-                        </select>
+                      <input
+                        id={`title-${column.status}`}
+                        name="title"
+                        required
+                        minLength={1}
+                        maxLength={150}
+                        placeholder="Nom de la tâche..."
+                        className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                      />
 
-                        <label
-                          htmlFor={`type-${column.status}`}
-                          className="block text-xs font-medium text-slate-600"
-                        >
-                          Type
-                        </label>
+                      <label
+                        htmlFor={`description-${column.status}`}
+                        className="block text-xs font-medium text-slate-600"
+                      >
+                        Description (facultative)
+                      </label>
 
-                        <select
-                          id={`type-${column.status}`}
-                          name="type"
-                          defaultValue="TASK"
-                          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500"
-                        >
-                          <option value="TASK">Tâche</option>
-                          <option value="BUG">Bug</option>
-                        </select>
+                      <textarea
+                        id={`description-${column.status}`}
+                        name="description"
+                        maxLength={2000}
+                        rows={2}
+                        placeholder="Description..."
+                        className="w-full resize-y rounded-md border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                      />
 
-                        <label
-                          htmlFor={`title-${column.status}`}
-                          className="block text-xs font-medium text-slate-600"
-                        >
-                          Titre
-                        </label>
-
-                        <input
-                          id={`title-${column.status}`}
-                          name="title"
-                          required
-                          minLength={1}
-                          maxLength={150}
-                          placeholder="Nom de la tâche..."
-                          className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                        />
-
-                        <label
-                          htmlFor={`description-${column.status}`}
-                          className="block text-xs font-medium text-slate-600"
-                        >
-                          Description (facultative)
-                        </label>
-
-                        <textarea
-                          id={`description-${column.status}`}
-                          name="description"
-                          maxLength={2000}
-                          rows={2}
-                          placeholder="Description..."
-                          className="w-full resize-y rounded-md border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                        />
-
-                        <button
-                          type="submit"
-                          className="w-full rounded-md px-3 py-2 text-sm font-medium text-indigo-600 transition hover:bg-indigo-50"
-                        >
-                          + Ajouter une tâche
-                        </button>
-                      </form>
-                    ) : (
-                      <p className="rounded-lg border border-dashed border-slate-300 p-3 text-sm text-slate-500">
-                        Crée une story pour pouvoir ajouter une tâche.
-                      </p>
-                    )}
+                      <button
+                        type="submit"
+                        className="w-full rounded-md px-3 py-2 text-sm font-medium text-indigo-600 transition hover:bg-indigo-50"
+                      >
+                        + Ajouter une tâche
+                      </button>
+                    </form>
                   </div>
                 </section>
               );
