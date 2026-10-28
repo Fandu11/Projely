@@ -288,10 +288,19 @@ export async function removeProjectMember(
   redirect(`/projects/${projectId}`);
 }
 
+export type SprintActionState = {
+  success?: string;
+  error?: string;
+};
+
 export async function createSprint(
   projectId: string,
+  _previousState: SprintActionState,
   formData: FormData,
-) {
+): Promise<SprintActionState> {
+
+  const name = String(formData.get("name") ?? "").trim();
+  const goal = String(formData.get("goal") ?? "").trim();
   const session = await getSession();
 
   if (!session?.user) {
@@ -306,9 +315,6 @@ export async function createSprint(
   if (!project) {
     redirect("/projects");
   }
-
-  const name = String(formData.get("name") ?? "").trim();
-  const goal = String(formData.get("goal") ?? "").trim();
   const startDateValue = String(
     formData.get("startDate") ?? "",
   );
@@ -329,7 +335,8 @@ export async function createSprint(
     Number.isNaN(endDate.getTime()) ||
     endDate < startDate
   ) {
-    redirect(`/projects/${projectId}?error=invalid`);
+    revalidatePath(`/projects/${projectId}`);
+    redirect(`/projects/${projectId}?tab=sprints`);
   }
 
   await prisma.sprint.create({

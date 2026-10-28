@@ -3,6 +3,8 @@
 
 import { useActionState, useState } from "react";
 import type { ReactNode } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect } from "react";
 
 import {
   addProjectMember,
@@ -58,7 +60,22 @@ export default function ProjectTabs({
   tasksContent,
   sprints,
 }: ProjectTabsProps) {
+
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [activeTab, setActiveTab] = useState<TabId>("tasks");
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+
+    if (tabs.some((item) => item.id === tab)) {
+      setActiveTab(tab as TabId);
+    } else {
+      setActiveTab("tasks");
+    }
+  }, [searchParams]);
 
   const allMembers = [
     { ...owner, role: "Propriétaire" },
@@ -89,7 +106,16 @@ export default function ProjectTabs({
           <button
             key={tab.id}
             type="button"
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => {
+              setActiveTab(tab.id);
+
+              const params = new URLSearchParams(searchParams.toString());
+              params.set("tab", tab.id);
+
+              router.replace(`${pathname}?${params.toString()}`, {
+                scroll: false,
+              });
+            }}
             className={`shrink-0 border-b-2 px-3 py-3 text-sm font-medium transition ${
               activeTab === tab.id
                 ? "border-blue-600 text-blue-700"
