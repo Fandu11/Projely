@@ -6,6 +6,8 @@ import type { ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
+import BacklogSection from "./BacklogSection";
+
 import {
   addProjectMember,
   removeProjectMember,
@@ -52,6 +54,26 @@ type ProjectTask = {
   sprintId: string | null;
 };
 
+type BacklogTask = {
+  id: string;
+  title: string;
+  type: "TASK" | "BUG";
+  status: "TODO" | "IN_PROGRESS" | "TO_REVIEW" | "DONE";
+  priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+};
+
+type BacklogStory = {
+  id: string;
+  title: string;
+  tasks: BacklogTask[];
+};
+
+type BacklogEpic = {
+  id: string;
+  name: string;
+  stories: BacklogStory[];
+};
+
 type ProjectTabsProps = {
   projectId: string;
   currentUserId: string;
@@ -61,10 +83,14 @@ type ProjectTabsProps = {
   tasksContent: ReactNode;
   sprints: ProjectSprint[];
   allTasks: ProjectTask[];
+  epics: BacklogEpic[];
+  standaloneStories: BacklogStory[];
+  standaloneTasks: BacklogTask[];
 };
 
 const tabs = [
   { id: "tasks", label: "Tâches" },
+  { id: "backlog", label: "Backlog" },
   { id: "sprints", label: "Sprints" },
   { id: "calendar", label: "Vue calendrier" },
   { id: "members", label: "Membres" },
@@ -112,6 +138,9 @@ export default function ProjectTabs({
   tasksContent,
   sprints,
   allTasks,
+  epics,
+  standaloneStories,
+  standaloneTasks,
 }: ProjectTabsProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -181,6 +210,15 @@ export default function ProjectTabs({
       </nav>
 
       {activeTab === "tasks" && tasksContent}
+
+      {activeTab === "backlog" && (
+        <BacklogSection
+          projectId={projectId}
+          epics={epics}
+          standaloneStories={standaloneStories}
+          standaloneTasks={standaloneTasks ?? []}
+        />
+      )}
 
       {activeTab === "sprints" && (
         <div className="space-y-8">

@@ -121,6 +121,48 @@ async function ProjectContent({
           },
         },
       },
+      epics: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          stories: {
+            orderBy: { createdAt: "asc" },
+            include: {
+              tasks: {
+                where: { projectId },
+                orderBy: { createdAt: "asc" },
+                select: {
+                  id: true,
+                  title: true,
+                  type: true,
+                  status: true,
+                  priority: true,
+                  storyId: true,
+                  sprintId: true,
+                },
+              },
+            },
+          },
+        },
+      },
+      stories: {
+        where: { epicId: null },
+        orderBy: { createdAt: "asc" },
+        include: {
+          tasks: {
+            where: { projectId },
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              title: true,
+              type: true,
+              status: true,
+              priority: true,
+              storyId: true,
+              sprintId: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -176,6 +218,23 @@ async function ProjectContent({
     },
   });
 
+  const standaloneTasks = await prisma.task.findMany({
+    where: {
+      projectId,
+      storyId: null,
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+    select: {
+      id: true,
+      title: true,
+      type: true,
+      status: true,
+      priority: true,
+    },
+  });
+
   const tasks = projectTasks.map((task) => ({
     ...task,
     storyTitle: task.story?.title ?? "Aucune story",
@@ -223,6 +282,33 @@ async function ProjectContent({
         ownerId={project.ownerId}
         owner={project.owner}
         members={project.members}
+        standaloneTasks={standaloneTasks}
+        epics={project.epics.map((epic) => ({
+          id: epic.id,
+          name: epic.name,
+          stories: epic.stories.map((story) => ({
+            id: story.id,
+            title: story.title,
+            tasks: story.tasks.map((task) => ({
+              id: task.id,
+              title: task.title,
+              type: task.type,
+              status: task.status,
+              priority: task.priority,
+            })),
+          })),
+        }))}
+        standaloneStories={project.stories.map((story) => ({
+          id: story.id,
+          title: story.title,
+          tasks: story.tasks.map((task) => ({
+            id: task.id,
+            title: task.title,
+            type: task.type,
+            status: task.status,
+            priority: task.priority,
+          })),
+        }))}
         allTasks={tasks.map((task) => ({
           id: task.id,
           title: task.title,
@@ -252,6 +338,7 @@ async function ProjectContent({
             priority: task.priority,
             storyId: task.storyId,
           })),
+          
         }))}
         tasksContent={
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
