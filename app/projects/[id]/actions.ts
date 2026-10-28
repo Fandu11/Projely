@@ -366,3 +366,154 @@ export async function createSprint(
   redirect(`/projects/${projectId}?tab=sprints`);
 }
 
+
+type UpdateBacklogResult = {
+  success: boolean;
+  error?: string;
+};
+
+async function canEditProject(projectId: string) {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  if (!session?.user?.id) {
+    return false;
+  }
+
+  const project = await prisma.project.findFirst({
+    where: {
+      id: projectId,
+      OR: [
+        { ownerId: session.user.id },
+        { members: { some: { id: session.user.id } } },
+      ],
+    },
+    select: { id: true },
+  });
+
+  return Boolean(project);
+}
+
+export async function updateBacklogEpic(
+  projectId: string,
+  epicId: string,
+  name: string,
+): Promise<UpdateBacklogResult> {
+  try {
+    if (!(await canEditProject(projectId))) {
+      return {
+        success: false,
+        error: "Tu n'as pas l'autorisation de modifier cette Epic.",
+      };
+    }
+
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
+      return {
+        success: false,
+        error: "Le nom de l'Epic ne peut pas être vide.",
+      };
+    }
+
+    const result = await prisma.epic.updateMany({
+      where: {
+        id: epicId,
+        projectId,
+      },
+      data: {
+        name: trimmedName,
+      },
+    });
+
+    if (result.count === 0) {
+      return {
+        success: false,
+        error: "Epic introuvable dans ce projet.",
+      };
+    }
+
+    revalidatePath(`/projects/${projectId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Erreur modification Epic :", error);
+
+    return {
+      success: false,
+      error: "Impossible de modifier l'Epic.",
+    };
+  }
+}
+
+export async function updateBacklogStory(
+  projectId: string,
+  storyId: string,
+  title: string,
+  epicId: string | null,
+): Promise<UpdateBacklogResult> {
+  try {
+    if (!(await canEditProject(projectId))) {
+      return {
+        success: false,
+        error: "Tu n'as pas l'autorisation de modifier cette Story.",
+      };
+    }
+
+    const trimmedTitle = title.trim();
+
+    if (!trimmedTitle) {
+      return {
+        success: false,
+        error: "Le titre de la Story ne peut pas être vide.",
+      };
+    }
+
+    if (epicId) {
+      const epic = await prisma.epic.findFirst({
+        where: {
+          id: epicId,
+          projectId,
+        },
+        select: { id: true },
+      });
+
+      if (!epic) {
+        return {
+          success: false,
+          error: "L'Epic sélectionnée n'appartient pas à ce projet.",
+        };
+      }
+    }
+
+    const result = await prisma.story.updateMany({
+      where: {
+        id: storyId,
+        projectId,
+      },
+      data: {
+        title: trimmedTitle,
+        epicId,
+      },
+    });
+
+    if (result.count === 0) {
+      return {
+        success: false,
+        error: "Story introuvable dans ce projet.",
+      };
+    }
+
+    revalidatePath(`/projects/${projectId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Erreur modification Story :", error);
+
+    return {
+      success: false,
+      error: "Impossible de modifier la Story.",
+    };
+  }
+}
