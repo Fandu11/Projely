@@ -3,6 +3,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect, notFound } from "next/navigation";
 import { Suspense } from "react";
+
 import { auth } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import { createTask } from "./actions";
@@ -55,8 +56,6 @@ const priorityColors = {
 const typeLabels = {
   TASK: "Tâche",
   BUG: "Bug",
-  STORY: "Story",
-  EPIC: "Epic",
 } as const;
 
 export default function ProjectPage(props: ProjectPageProps) {
@@ -111,27 +110,33 @@ async function ProjectContent({
           email: true,
         },
       },
-      tasks: {
+      epics: {
         orderBy: { createdAt: "desc" },
         include: {
-          assignee: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-          parentTask: {
-            select: {
-              id: true,
-              title: true,
-              type: true,
+          stories: {
+            orderBy: { createdAt: "desc" },
+            include: {
+              tasks: {
+                orderBy: { createdAt: "desc" },
+                include: {
+                  assignee: {
+                    select: {
+                      id: true,
+                      name: true,
+                      email: true,
+                    },
+                  },
+                },
+              },
             },
           },
         },
       },
       sprints: {
-        orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
+        orderBy: [
+          { startDate: "desc" },
+          { createdAt: "desc" },
+        ],
         include: {
           tasks: {
             orderBy: { createdAt: "asc" },
@@ -141,7 +146,7 @@ async function ProjectContent({
               type: true,
               status: true,
               priority: true,
-              parentTaskId: true,
+              storyId: true,
             },
           },
           _count: {
@@ -155,6 +160,26 @@ async function ProjectContent({
   if (!project) {
     notFound();
   }
+
+  // Les tâches sont récupérées à travers les stories des epics.
+  const tasks = project.epics.flatMap((epic) =>
+    epic.stories.flatMap((story) =>
+      story.tasks.map((task) => ({
+        ...task,
+        storyTitle: story.title,
+        epicName: epic.name,
+      })),
+    ),
+  );
+
+  // Toutes les stories du projet, pour le formulaire de création.
+  const stories = project.epics.flatMap((epic) =>
+    epic.stories.map((story) => ({
+      id: story.id,
+      title: story.title,
+      epicName: epic.name,
+    })),
+  );
 
   return (
     <main className="min-w-0 p-6 md:p-8">
@@ -189,11 +214,21 @@ async function ProjectContent({
           role="alert"
           className="mb-5 rounded-lg bg-red-50 p-3 text-sm text-red-700"
         >
-          Vérifie le titre, la description et le statut de la tâche.
+          Vérifie le titre, la description, le statut et la story associée.
         </p>
       )}
 
-      {/* Onglets et tableau Kanban */}
+      {stories.length === 0 && (
+        <div
+          role="status"
+          className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          Ce projet ne contient aucune story. Crée d'abord un epic, puis
+          une story, avant d'ajouter des tâches.
+        </div>
+      )}
+
+      {/* Onglets du projet et tableau Kanban */}
       <ProjectTabs
         projectId={project.id}
         currentUserId={session.user.id}
@@ -217,13 +252,13 @@ async function ProjectContent({
             type: task.type,
             status: task.status,
             priority: task.priority,
-            parentTaskId: task.parentTaskId,
+            storyId: task.storyId,
           })),
         }))}
         tasksContent={
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
             {columns.map((column) => {
-              const tasks = project.tasks.filter(
+              const columnTasks = tasks.filter(
                 (task) => task.status === column.status,
               );
 
@@ -241,25 +276,23 @@ async function ProjectContent({
                     </h2>
 
                     <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
-                      {tasks.length}
+                      {columnTasks.length}
                     </span>
                   </div>
 
-                  {/* Cartes de tâches cliquables */}
                   <div className="space-y-3">
-                    {tasks.map((task) => (
+                    {/* Cartes de tâches */}
+                    {columnTasks.map((task) => (
                       <Link
                         key={task.id}
                         href={`/projects/${project.id}/tasks/${task.id}/edit`}
                         aria-label={`Modifier la tâche : ${task.title}`}
                         className="block rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-indigo-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                       >
-                        {/* Titre */}
                         <h3 className="break-words font-semibold text-slate-900">
                           {task.title}
                         </h3>
 
-                        {/* Description */}
                         {task.description && (
                           <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-600">
                             {task.description}
@@ -279,28 +312,26 @@ async function ProjectContent({
                           </span>
                         </div>
 
+                        {/* Story et epic associés */}
+                        <div className="mt-3 break-words text-xs text-slate-500">
+                          <p>
+                            <span className="font-medium">Story :</span>{" "}
+                            {task.storyTitle}
+                          </p>
+                          <p className="mt-1">
+                            <span className="font-medium">Epic :</span>{" "}
+                            {task.epicName}
+                          </p>
+                        </div>
+
                         {/* Assignation */}
                         <div className="mt-3 text-xs text-slate-500">
-                          <span className="font-medium">
-                            Assigné à :{" "}
-                          </span>
-
+                          <span className="font-medium">Assigné à : </span>
                           {task.assignee?.name ||
                             task.assignee?.email ||
                             task.assignedGroup ||
                             "Personne"}
                         </div>
-
-                        {/* Story ou Epic parente */}
-                        {task.parentTask && (
-                          <div className="mt-2 break-words text-xs text-slate-500">
-                            <span className="font-medium">
-                              Parent :{" "}
-                            </span>
-                            {typeLabels[task.parentTask.type]} —{" "}
-                            {task.parentTask.title}
-                          </div>
-                        )}
 
                         {/* Date de création */}
                         <p className="mt-3 text-xs text-slate-400">
@@ -310,43 +341,88 @@ async function ProjectContent({
                       </Link>
                     ))}
 
-                    {/* Formulaire d'ajout rapide : indépendant des cartes */}
-                    <form
-                      action={createTask.bind(null, project.id)}
-                      className="space-y-2 rounded-lg border border-dashed border-slate-300 bg-white/70 p-3"
-                    >
-                      <input
-                        type="hidden"
-                        name="status"
-                        value={column.status}
-                      />
-
-                      <input
-                        name="title"
-                        required
-                        minLength={1}
-                        maxLength={150}
-                        placeholder="Nom de la tâche..."
-                        aria-label={`Nouvelle tâche : ${column.title}`}
-                        className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                      />
-
-                      <textarea
-                        name="description"
-                        maxLength={2000}
-                        rows={2}
-                        placeholder="Description (facultative)"
-                        aria-label="Description de la tâche"
-                        className="w-full resize-y rounded-md border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                      />
-
-                      <button
-                        type="submit"
-                        className="w-full rounded-md px-3 py-2 text-sm font-medium text-indigo-600 transition hover:bg-indigo-50"
+                    {/* Formulaire de création rapide */}
+                    {stories.length > 0 ? (
+                      <form
+                        action={createTask.bind(null, project.id)}
+                        className="space-y-2 rounded-lg border border-dashed border-slate-300 bg-white/70 p-3"
                       >
-                        + Ajouter une tâche
-                      </button>
-                    </form>
+                        <input
+                          type="hidden"
+                          name="status"
+                          value={column.status}
+                        />
+
+                        <label
+                          htmlFor={`story-${column.status}`}
+                          className="block text-xs font-medium text-slate-600"
+                        >
+                          Story associée
+                        </label>
+
+                        <select
+                          id={`story-${column.status}`}
+                          name="storyId"
+                          required
+                          defaultValue=""
+                          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                        >
+                          <option value="" disabled>
+                            Choisir une story
+                          </option>
+
+                          {stories.map((story) => (
+                            <option key={story.id} value={story.id}>
+                              {story.epicName} — {story.title}
+                            </option>
+                          ))}
+                        </select>
+
+                        <label
+                          htmlFor={`title-${column.status}`}
+                          className="block text-xs font-medium text-slate-600"
+                        >
+                          Titre
+                        </label>
+
+                        <input
+                          id={`title-${column.status}`}
+                          name="title"
+                          required
+                          minLength={1}
+                          maxLength={150}
+                          placeholder="Nom de la tâche..."
+                          className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                        />
+
+                        <label
+                          htmlFor={`description-${column.status}`}
+                          className="block text-xs font-medium text-slate-600"
+                        >
+                          Description (facultative)
+                        </label>
+
+                        <textarea
+                          id={`description-${column.status}`}
+                          name="description"
+                          maxLength={2000}
+                          rows={2}
+                          placeholder="Description..."
+                          className="w-full resize-y rounded-md border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                        />
+
+                        <button
+                          type="submit"
+                          className="w-full rounded-md px-3 py-2 text-sm font-medium text-indigo-600 transition hover:bg-indigo-50"
+                        >
+                          + Ajouter une tâche
+                        </button>
+                      </form>
+                    ) : (
+                      <p className="rounded-lg border border-dashed border-slate-300 p-3 text-sm text-slate-500">
+                        Crée une story pour pouvoir ajouter une tâche.
+                      </p>
+                    )}
                   </div>
                 </section>
               );
