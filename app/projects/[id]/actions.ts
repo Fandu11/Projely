@@ -17,13 +17,21 @@ const allowedStatuses = [
 
 const allowedTypes = ["TASK", "BUG"] as const;
 
+export type MemberActionState = {
+  success?: string;
+  error?: string;
+};
+
 async function getSession() {
   return auth.api.getSession({
     headers: await headers(),
   });
 }
 
-async function getAccessibleProject(projectId: string, userId: string) {
+async function getAccessibleProject(
+  projectId: string,
+  userId: string,
+) {
   return prisma.project.findFirst({
     where: {
       id: projectId,
@@ -69,7 +77,7 @@ export async function createTask(
   const status = String(formData.get("status") ?? "TODO");
   const type = String(formData.get("type") ?? "TASK");
 
-  // La Story est facultative.
+  // L'association à une Story est facultative.
   const storyId =
     String(formData.get("storyId") ?? "").trim() || null;
 
@@ -123,14 +131,23 @@ export async function createTask(
   redirect(`/projects/${projectId}`);
 }
 
+/**
+ * Avec useActionState, React transmet :
+ * 1. projectId (grâce à bind)
+ * 2. l'état précédent
+ * 3. les données du formulaire
+ */
 export async function addProjectMember(
   projectId: string,
+  _previousState: MemberActionState,
   formData: FormData,
-) {
+): Promise<MemberActionState> {
   const session = await getSession();
 
   if (!session?.user) {
-    redirect("/login");
+    return {
+      error: "Vous devez être connecté pour ajouter un membre.",
+    };
   }
 
   const project = await prisma.project.findFirst({
@@ -138,11 +155,16 @@ export async function addProjectMember(
       id: projectId,
       ownerId: session.user.id,
     },
-    select: { id: true },
+    select: {
+      id: true,
+      ownerId: true,
+    },
   });
 
   if (!project) {
-    redirect(`/projects/${projectId}?error=forbidden`);
+    return {
+      error: "Seul le propriétaire peut ajouter un membre.",
+    };
   }
 
   const email = String(formData.get("email") ?? "")
@@ -150,16 +172,44 @@ export async function addProjectMember(
     .toLowerCase();
 
   if (!email || email.length > 254) {
-    redirect(`/projects/${projectId}?error=invalid`);
+    return {
+      error: "Veuillez saisir une adresse e-mail valide.",
+    };
   }
 
   const member = await prisma.user.findUnique({
     where: { email },
-    select: { id: true },
+    select: { id: true, email: true },
   });
 
   if (!member) {
-    redirect(`/projects/${projectId}?error=member-not-found`);
+    return {
+      error: "Aucun utilisateur trouvé avec cette adresse e-mail.",
+    };
+  }
+
+  if (member.id === project.ownerId) {
+    return {
+      error: "Le propriétaire est déjà membre du projet.",
+    };
+  }
+
+  const alreadyMember = await prisma.project.findFirst({
+    where: {
+      id: project.id,
+      members: {
+        some: {
+          id: member.id,
+        },
+      },
+    },
+    select: { id: true },
+  });
+
+  if (alreadyMember) {
+    return {
+      error: "Cet utilisateur est déjà membre du projet.",
+    };
   }
 
   await prisma.project.update({
@@ -172,7 +222,10 @@ export async function addProjectMember(
   });
 
   revalidatePath(`/projects/${projectId}`);
-  redirect(`/projects/${projectId}`);
+
+  return {
+    success: `${member.email} a été ajouté au projet.`,
+  };
 }
 
 export async function removeProjectMember(
@@ -190,7 +243,10 @@ export async function removeProjectMember(
       id: projectId,
       ownerId: session.user.id,
     },
-    select: { id: true },
+    select: {
+      id: true,
+      ownerId: true,
+    },
   });
 
   if (!project) {
@@ -203,6 +259,20 @@ export async function removeProjectMember(
 
   if (!memberId || memberId === session.user.id) {
     redirect(`/projects/${projectId}?error=invalid`);
+  }
+
+  const memberExists = await prisma.project.findFirst({
+    where: {
+      id: project.id,
+      members: {
+        some: { id: memberId },
+      },
+    },
+    select: { id: true },
+  });
+
+  if (!memberExists) {
+    redirect(`/projects/${projectId}?error=member-not-found`);
   }
 
   await prisma.project.update({
