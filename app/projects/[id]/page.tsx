@@ -474,20 +474,28 @@ async function ProjectContent({
                       />
 
                       <label
-                        htmlFor={`description-${column.status}`}
+                        htmlFor={`story-${column.status}`}
                         className="block text-xs font-medium text-slate-600"
                       >
-                        Description (facultative)
+                        Story parente
                       </label>
 
-                      <textarea
-                        id={`description-${column.status}`}
-                        name="description"
-                        maxLength={2000}
-                        rows={2}
-                        placeholder="Description..."
-                        className="w-full resize-y rounded-md border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                      />
+                      <select
+                        id={`story-${column.status}`}
+                        name="storyId"
+                        defaultValue=""
+                        className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                      >
+                        <option value="">Aucune story</option>
+
+                        {stories.map((story) => (
+                          <option key={story.id} value={story.id}>
+                            {story.epic?.name
+                              ? `${story.epic.name} — ${story.title}`
+                              : story.title}
+                          </option>
+                        ))}
+                      </select>
 
                       <button
                         type="submit"
