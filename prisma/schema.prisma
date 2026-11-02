@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -21,6 +20,9 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  teamsOwned Team[] @relation("TeamOwner")
+  teams      Team[] @relation("TeamMembers")
+
   sessions      Session[]
   accounts      Account[]
   assignedTasks Task[]    @relation("TaskAssignee")
@@ -28,6 +30,22 @@ model User {
   memberOf      Project[] @relation("ProjectMembers")
 
   @@map("user")
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ownerId String
+  owner   User   @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  members  User[]    @relation("TeamMembers")
+  projects Project[]
+
+  @@index([ownerId])
 }
 
 model Session {
@@ -80,18 +98,20 @@ model Verification {
 }
 
 model Project {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
-  description String?  @db.Text
+  description String? @db.Text
   ownerId     String
 
-  owner   User     @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  members User[]   @relation("ProjectMembers")
+  owner   User   @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members User[] @relation("ProjectMembers")
 
   sprints Sprint[]
   epics   Epic[]
   stories Story[]
   tasks   Task[]
+
+  teams Team[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -119,9 +139,9 @@ model Sprint {
 }
 
 model Epic {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
-  description String?  @db.Text
+  description String? @db.Text
   projectId   String
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -134,9 +154,9 @@ model Epic {
 }
 
 model Story {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   title       String
-  description String?  @db.Text
+  description String? @db.Text
   projectId   String
   epicId      String?
 
@@ -165,13 +185,13 @@ model Task {
 
   // Les relations Story et Sprint restent facultatives.
   storyId String?
-  story   Story? @relation(fields: [storyId], references: [id], onDelete: SetNull)
+  story   Story?  @relation(fields: [storyId], references: [id], onDelete: SetNull)
 
   sprintId String?
   sprint   Sprint? @relation(fields: [sprintId], references: [id], onDelete: SetNull)
 
   assigneeId String?
-  assignee   User? @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  assignee   User?   @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
 
   assignedGroup String?
 
