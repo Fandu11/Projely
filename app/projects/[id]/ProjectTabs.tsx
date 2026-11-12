@@ -22,13 +22,13 @@ type ProjectMember = {
   email: string;
 };
 
-type SprintTask = {
+type SprintStory = {
   id: string;
   title: string;
-  type: "TASK" | "BUG";
-  status: "TODO" | "IN_PROGRESS" | "TO_REVIEW" | "DONE";
-  priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-  storyId: string | null;
+  epicName: string | null;
+  taskCount: number;
+  completedTaskCount: number;
+  status: "TODO" | "IN_PROGRESS" | "DONE";
 };
 
 type ProjectSprint = {
@@ -38,9 +38,9 @@ type ProjectSprint = {
   startDate: string;
   endDate: string;
   status: "PLANNED" | "ACTIVE" | "COMPLETED";
-  totalTasks: number;
-  completedTasks: number;
-  tasks: SprintTask[];
+  totalStories: number;
+  completedStories: number;
+  stories: SprintStory[];
 };
 
 type ProjectTask = {

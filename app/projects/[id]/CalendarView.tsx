@@ -5,15 +5,13 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 type TaskStatus = "TODO" | "IN_PROGRESS" | "TO_REVIEW" | "DONE";
-type TaskType = "TASK" | "BUG";
-
-type CalendarTask = {
+type CalendarStory = {
   id: string;
   title: string;
-  type: TaskType;
-  status: TaskStatus;
-  priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-  storyId: string | null;
+  epicName: string | null;
+  taskCount: number;
+  completedTaskCount: number;
+  status: "TODO" | "IN_PROGRESS" | "DONE";
 };
 
 export type CalendarSprint = {
@@ -23,9 +21,9 @@ export type CalendarSprint = {
   startDate: string;
   endDate: string;
   status: string;
-  totalTasks: number;
-  completedTasks: number;
-  tasks: CalendarTask[];
+  totalStories: number;
+  completedStories: number;
+  stories: CalendarStory[];
 };
 
 type CalendarViewProps = {
@@ -48,20 +46,6 @@ const STATUS_STYLES: Record<TaskStatus, string> = {
   TO_REVIEW: "bg-amber-100 text-amber-800",
   DONE: "bg-emerald-100 text-emerald-700",
 };
-
-const PRIORITY_LABELS = {
-  LOW: "Faible",
-  MEDIUM: "Moyenne",
-  HIGH: "Haute",
-  CRITICAL: "Critique",
-} as const;
-
-const PRIORITY_STYLES = {
-  LOW: "bg-slate-100 text-slate-600",
-  MEDIUM: "bg-blue-100 text-blue-700",
-  HIGH: "bg-orange-100 text-orange-700",
-  CRITICAL: "bg-red-100 text-red-700",
-} as const;
 
 /**
  * Convertit une date ISO en date locale sans décalage de fuseau horaire.
@@ -148,7 +132,7 @@ export default function CalendarView({
   );
 
   const [showSprints, setShowSprints] = useState(true);
-  const [taskStatusFilter, setTaskStatusFilter] = useState<
+  const [storyStatusFilter, setStoryStatusFilter] = useState<
     "ALL" | TaskStatus
   >("ALL");
 
@@ -194,27 +178,27 @@ export default function CalendarView({
       );
   }, [displayedMonth, sprints, showSprints]);
 
-  const allTasks = useMemo(() => {
+  const allStories = useMemo(() => {
     const seen = new Set<string>();
 
     return sprints.flatMap((sprint) =>
-      sprint.tasks
-        .filter((task) => {
-          if (seen.has(task.id)) return false;
-          seen.add(task.id);
+      sprint.stories
+        .filter((story) => {
+          if (seen.has(story.id)) return false;
+          seen.add(story.id);
           return true;
         })
-        .map((task) => ({
-          ...task,
+        .map((story) => ({
+          ...story,
           sprintId: sprint.id,
           sprintName: sprint.name,
         })),
     );
   }, [sprints]);
 
-  const visibleTasks = allTasks.filter(
-    (task) =>
-      taskStatusFilter === "ALL" || task.status === taskStatusFilter,
+  const visibleStories = allStories.filter(
+    (story) =>
+      storyStatusFilter === "ALL" || story.status === storyStatusFilter,
   );
 
   const changeMonth = (offset: number) => {
@@ -237,7 +221,7 @@ export default function CalendarView({
             {monthLabel}
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Consulte les périodes de sprint et les tâches associées.
+            Consulte les périodes de sprint et les stories associées.
           </p>
         </div>
 
@@ -287,11 +271,11 @@ export default function CalendarView({
         </label>
 
         <label className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-          Statut des tâches
+          Statut des stories
           <select
-            value={taskStatusFilter}
+            value={storyStatusFilter}
             onChange={(event) =>
-              setTaskStatusFilter(
+              setStoryStatusFilter(
                 event.target.value as "ALL" | TaskStatus,
               )
             }
@@ -415,9 +399,9 @@ export default function CalendarView({
           <div className="grid gap-3 md:grid-cols-2">
             {visibleSprints.map((sprint) => {
               const progress =
-                sprint.totalTasks > 0
+                sprint.totalStories > 0
                   ? Math.round(
-                      (sprint.completedTasks / sprint.totalTasks) * 100,
+                      (sprint.completedStories / sprint.totalStories) * 100,
                     )
                   : 0;
 
@@ -456,7 +440,7 @@ export default function CalendarView({
                   <div className="mt-4">
                     <div className="mb-1 flex justify-between text-xs text-slate-500">
                       <span>
-                        {sprint.completedTasks} / {sprint.totalTasks} tâches
+                        {sprint.completedStories} / {sprint.totalStories} stories
                         terminées
                       </span>
                       <span>{progress}%</span>
@@ -510,80 +494,56 @@ export default function CalendarView({
             </p>
           )}
 
-          <div className="mt-5 flex flex-wrap gap-2">
-            {(["TODO", "IN_PROGRESS", "TO_REVIEW", "DONE"] as const).map(
-              (status) => {
-                const count = selectedSprint.tasks.filter(
-                  (task) => task.status === status,
-                ).length;
-
-                return (
-                  <span
-                    key={status}
-                    className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_STYLES[status]}`}
-                  >
-                    {STATUS_LABELS[status]} : {count}
-                  </span>
-                );
-              },
-            )}
-          </div>
-
           <div className="mt-5 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h4 className="font-semibold text-slate-900">
-                Tâches et bugs du sprint
+                Stories du sprint
               </h4>
               <span className="text-xs text-slate-500">
-                {visibleTasks.filter(
-                  (task) => task.sprintId === selectedSprint.id,
+                {visibleStories.filter(
+                  (story) => story.sprintId === selectedSprint.id,
                 ).length}{" "}
                 affiché(s)
               </span>
             </div>
 
-            {selectedSprint.tasks.filter(
-              (task) =>
-                taskStatusFilter === "ALL" ||
-                task.status === taskStatusFilter,
+            {selectedSprint.stories.filter(
+              (story) =>
+                storyStatusFilter === "ALL" ||
+                story.status === storyStatusFilter,
             ).length === 0 ? (
               <p className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">
-                Aucune tâche ne correspond à ce filtre dans ce sprint.
+                Aucune story ne correspond à ce filtre dans ce sprint.
               </p>
             ) : (
               <div className="space-y-2">
-                {selectedSprint.tasks
+                {selectedSprint.stories
                   .filter(
-                    (task) =>
-                      taskStatusFilter === "ALL" ||
-                      task.status === taskStatusFilter,
+                    (story) =>
+                      storyStatusFilter === "ALL" ||
+                      story.status === storyStatusFilter,
                   )
-                  .map((task) => (
+                  .map((story) => (
                     <Link
-                      key={task.id}
-                      href={`/projects/${projectId}/tasks/${task.id}/edit`}
+                      key={story.id}
+                      href={`/projects/${projectId}?tab=backlog`}
                       className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3 transition hover:border-indigo-300 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="min-w-0">
                         <p className="break-words text-sm font-medium text-slate-900">
-                          {task.type === "BUG" ? "🐞 " : "✓ "}
-                          {task.title}
+                          {story.title}
                         </p>
                         <p className="mt-1 text-xs text-slate-500">
-                          {task.type === "BUG" ? "Bug" : "Tâche"}
+                          {story.completedTaskCount}/{story.taskCount} tâches
+                          terminées
                         </p>
                       </div>
 
                       <div className="flex shrink-0 flex-wrap gap-2">
                         <span
-                          className={`rounded-full px-2 py-1 text-xs font-medium ${STATUS_STYLES[task.status]}`}
+                          className={`rounded-full px-2 py-1 text-xs font-medium ${STATUS_STYLES[story.status]}`}
                         >
-                          {STATUS_LABELS[task.status]}
-                        </span>
-                        <span
-                          className={`rounded-full px-2 py-1 text-xs font-medium ${PRIORITY_STYLES[task.priority]}`}
-                        >
-                          {PRIORITY_LABELS[task.priority]}
+                          {STATUS_LABELS[story.status]}
                         </span>
                       </div>
                     </Link>

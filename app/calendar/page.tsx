@@ -43,12 +43,10 @@ export default async function CalendarPage() {
           startDate: true,
           endDate: true,
           status: true,
-          tasks: {
+          stories: {
             select: {
               id: true,
               title: true,
-              status: true,
-              priority: true,
             },
           },
         },
@@ -66,7 +64,7 @@ export default async function CalendarPage() {
       status: sprint.status,
       projectId: project.id,
       projectName: project.name,
-      tasks: sprint.tasks,
+      stories: sprint.stories,
     }))
   );
 

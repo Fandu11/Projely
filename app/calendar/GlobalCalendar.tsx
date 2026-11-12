@@ -4,11 +4,9 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-type CalendarTask = {
+type CalendarStory = {
   id: string;
   title: string;
-  status: string;
-  priority: string;
 };
 
 type CalendarEvent = {
@@ -20,7 +18,7 @@ type CalendarEvent = {
   status: string;
   projectId: string;
   projectName: string;
-  tasks: CalendarTask[];
+  stories: CalendarStory[];
 };
 
 type Props = {
@@ -34,20 +32,6 @@ const statusLabels: Record<string, string> = {
   TODO: "À faire",
   IN_PROGRESS: "En cours",
   DONE: "Terminé",
-};
-
-const priorityLabels: Record<string, string> = {
-  LOW: "Faible",
-  MEDIUM: "Moyenne",
-  HIGH: "Haute",
-  CRITICAL: "Critique",
-};
-
-const priorityColors: Record<string, string> = {
-  LOW: "bg-slate-100 text-slate-600",
-  MEDIUM: "bg-blue-100 text-blue-700",
-  HIGH: "bg-orange-100 text-orange-700",
-  CRITICAL: "bg-red-100 text-red-700",
 };
 
 const weekDays = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
@@ -304,31 +288,22 @@ export default function GlobalCalendar({ events }: Props) {
 
                 <div className="mt-4">
                   <p className="mb-2 text-sm font-medium text-slate-700">
-                    Tâches associées ({event.tasks.length})
+                    Stories associées ({event.stories.length})
                   </p>
 
-                  {event.tasks.length === 0 ? (
+                  {event.stories.length === 0 ? (
                     <p className="text-sm text-slate-400">
-                      Aucune tâche associée à ce sprint.
+                      Aucune story associée à ce sprint.
                     </p>
                   ) : (
                     <ul className="space-y-2">
-                      {event.tasks.map((task) => (
+                      {event.stories.map((story) => (
                         <li
-                          key={task.id}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2"
+                          key={story.id}
+                          className="rounded-lg bg-slate-50 px-3 py-2"
                         >
                           <span className="text-sm text-slate-700">
-                            {task.title}
-                          </span>
-                          <span
-                            className={`rounded-full px-2 py-1 text-xs ${
-                              priorityColors[task.priority] ??
-                              "bg-slate-100 text-slate-600"
-                            }`}
-                          >
-                            {priorityLabels[task.priority] ??
-                              task.priority}
+                            {story.title}
                           </span>
                         </li>
                       ))}

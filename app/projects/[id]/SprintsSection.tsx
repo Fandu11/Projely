@@ -2,21 +2,17 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import Link from "next/link";
 import { createSprint } from "./actions";
 
-type TaskType = "EPIC" | "STORY" | "TASK" | "BUG";
-type TaskStatus = "TODO" | "IN_PROGRESS" | "TO_REVIEW" | "DONE";
-type TaskPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 type SprintStatus = "PLANNED" | "ACTIVE" | "COMPLETED";
 
-type SprintTask = {
+type SprintStory = {
   id: string;
   title: string;
-  type: "TASK" | "BUG";
-  status: "TODO" | "IN_PROGRESS" | "TO_REVIEW" | "DONE";
-  priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-  storyId: string | null;
+  epicName: string | null;
+  taskCount: number;
+  completedTaskCount: number;
+  status: "TODO" | "IN_PROGRESS" | "DONE";
 };
 
 type SprintData = {
@@ -26,9 +22,9 @@ type SprintData = {
   startDate: string;
   endDate: string;
   status: SprintStatus;
-  totalTasks: number;
-  completedTasks: number;
-  tasks: SprintTask[];
+  totalStories: number;
+  completedStories: number;
+  stories: SprintStory[];
 };
 
 type SprintFormState = {
@@ -41,38 +37,10 @@ type SprintsSectionProps = {
   sprints: SprintData[];
 };
 
-const taskTypeLabels: Record<TaskType, string> = {
-  EPIC: "Epic",
-  STORY: "Story",
-  TASK: "Tâche",
-  BUG: "Bug",
-};
-
-const taskStatusLabels: Record<TaskStatus, string> = {
-  TODO: "À faire",
-  IN_PROGRESS: "En cours",
-  TO_REVIEW: "À vérifier",
-  DONE: "Terminée",
-};
-
-const taskPriorityLabels: Record<TaskPriority, string> = {
-  LOW: "Basse",
-  MEDIUM: "Moyenne",
-  HIGH: "Haute",
-  CRITICAL: "Critique",
-};
-
 const sprintStatusLabels: Record<SprintStatus, string> = {
   PLANNED: "Planifié",
   ACTIVE: "En cours",
   COMPLETED: "Terminé",
-};
-
-const taskTypeOrder: Record<TaskType, number> = {
-  EPIC: 0,
-  STORY: 1,
-  TASK: 2,
-  BUG: 3,
 };
 
 function formatDate(date: string): string {
@@ -83,97 +51,32 @@ function formatDate(date: string): string {
   });
 }
 
-/**
- * Trie les tâches par type, puis par titre.
- * Les tâches parentes sont affichées avant leurs enfants.
- */
-function sortTasks(tasks: SprintTask[]): SprintTask[] {
-  return [...tasks].sort((a, b) => {
-    const typeDifference = taskTypeOrder[a.type] - taskTypeOrder[b.type];
-
-    if (typeDifference !== 0) {
-      return typeDifference;
-    }
-
-    return a.title.localeCompare(b.title, "fr");
-  });
-}
-
-
-function TaskTree({
-  projectId,
-  tasks,
-}: {
-  projectId: string;
-  tasks: SprintTask[];
-}) {
-  const sortedTasks = [...tasks].sort((a, b) => {
-    const typeOrder: Record<SprintTask["type"], number> = {
-      TASK: 0,
-      BUG: 1,
-    };
-
-    const typeDifference = typeOrder[a.type] - typeOrder[b.type];
-
-    if (typeDifference !== 0) {
-      return typeDifference;
-    }
-
-    return a.title.localeCompare(b.title, "fr");
-  });
-
-  const taskTypeLabels: Record<SprintTask["type"], string> = {
-    TASK: "Tâche",
-    BUG: "Bug",
-  };
-
-  const taskStatusLabels: Record<SprintTask["status"], string> = {
-    TODO: "À faire",
-    IN_PROGRESS: "En cours",
-    TO_REVIEW: "À vérifier",
-    DONE: "Terminée",
-  };
-
-  const taskPriorityLabels: Record<SprintTask["priority"], string> = {
-    LOW: "Basse",
-    MEDIUM: "Moyenne",
-    HIGH: "Haute",
-    CRITICAL: "Critique",
-  };
-
-  if (sortedTasks.length === 0) {
+function StoryList({ stories }: { stories: SprintStory[] }) {
+  if (stories.length === 0) {
     return (
       <p className="mt-4 text-sm text-gray-500">
-        Aucune tâche associée à ce sprint pour le moment.
+        Aucune story associée à ce sprint pour le moment.
       </p>
     );
   }
 
   return (
     <ul className="mt-4 space-y-2">
-      {sortedTasks.map((task) => (
-        <li key={task.id}>
-          <Link
-            href={`/projects/${projectId}/tasks/${task.id}/edit`}
-            className="flex flex-col gap-2 rounded-lg border border-gray-200 p-3 transition hover:border-blue-300 hover:bg-gray-50 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <span className="rounded bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
-                {taskTypeLabels[task.type]}
-              </span>
-
-              <span className="break-words font-medium text-gray-900">
-                {task.title}
-              </span>
+      {stories.map((story) => (
+        <li key={story.id} className="rounded-lg border border-gray-200 p-3">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-medium text-gray-900">{story.title}</p>
+              {story.epicName && (
+                <p className="text-xs text-gray-500">
+                  Epic : {story.epicName}
+                </p>
+              )}
             </div>
-
-            <div className="flex flex-wrap gap-3 text-xs text-gray-600">
-              <span>{taskStatusLabels[task.status]}</span>
-              <span>
-                Priorité : {taskPriorityLabels[task.priority]}
-              </span>
-            </div>
-          </Link>
+            <span className="text-xs text-gray-600">
+              {story.completedTaskCount}/{story.taskCount} tâches terminées
+            </span>
+          </div>
         </li>
       ))}
     </ul>
@@ -200,7 +103,7 @@ export default function SprintsSection({
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Sprints</h2>
           <p className="mt-1 text-sm text-gray-600">
-            Organise les tâches du projet en cycles de travail.
+            Organise les stories du projet en cycles de travail.
           </p>
         </div>
 
@@ -317,16 +220,16 @@ export default function SprintsSection({
         <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center">
           <h3 className="font-medium text-gray-900">Aucun sprint</h3>
           <p className="mt-2 text-sm text-gray-600">
-            Crée ton premier sprint pour organiser les tâches du projet.
+            Crée ton premier sprint pour organiser les stories du projet.
           </p>
         </div>
       ) : (
         <div className="space-y-5">
           {sprints.map((sprint) => {
             const progress =
-              sprint.totalTasks > 0
+              sprint.totalStories > 0
                 ? Math.round(
-                    (sprint.completedTasks / sprint.totalTasks) * 100,
+                    (sprint.completedStories / sprint.totalStories) * 100,
                   )
                 : 0;
 
@@ -362,7 +265,7 @@ export default function SprintsSection({
                   <div className="mb-2 flex items-center justify-between text-sm">
                     <span className="text-gray-600">Progression</span>
                     <span className="font-medium text-gray-900">
-                      {sprint.completedTasks}/{sprint.totalTasks} tâches ·{" "}
+                      {sprint.completedStories}/{sprint.totalStories} stories ·{" "}
                       {progress} %
                     </span>
                   </div>
@@ -384,10 +287,10 @@ export default function SprintsSection({
 
                 <div className="mt-5 border-t border-gray-100 pt-4">
                   <h4 className="font-medium text-gray-900">
-                    Éléments du sprint
+                    Stories du sprint
                   </h4>
 
-                  <TaskTree projectId={projectId} tasks={sprint.tasks} />
+                  <StoryList stories={sprint.stories} />
                 </div>
               </article>
             );

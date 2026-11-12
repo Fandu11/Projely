@@ -96,25 +96,31 @@ async function ProjectContent({
       sprints: {
         orderBy: [{ startDate: "asc" }, { endDate: "asc" }],
         include: {
-          tasks: {
-            where: {
-              projectId,
-            },
+          stories: {
+            where: { projectId },
             orderBy: {
               createdAt: "asc",
             },
-            select: {
-              id: true,
-              title: true,
-              type: true,
-              status: true,
-              priority: true,
-              storyId: true,
+            include: {
+              epic: {
+                select: {
+                  name: true,
+                },
+              },
+              tasks: {
+                where: { projectId },
+                orderBy: { createdAt: "asc" },
+                select: {
+                  id: true,
+                  title: true,
+                  status: true,
+                },
+              },
             },
           },
           _count: {
             select: {
-              tasks: true,
+              stories: true,
             },
           },
         },
@@ -247,17 +253,26 @@ async function ProjectContent({
     startDate: sprint.startDate.toISOString(),
     endDate: sprint.endDate.toISOString(),
     status: sprint.status,
-    totalTasks: sprint._count.tasks,
-    completedTasks: sprint.tasks.filter(
-      (task) => task.status === "DONE",
+    totalStories: sprint._count.stories,
+    completedStories: sprint.stories.filter(
+      (story) =>
+        story.tasks.length > 0 &&
+        story.tasks.every((task) => task.status === "DONE"),
     ).length,
-    tasks: sprint.tasks.map((task) => ({
-      id: task.id,
-      title: task.title,
-      type: task.type,
-      status: task.status,
-      priority: task.priority,
-      storyId: task.storyId,
+    stories: sprint.stories.map((story) => ({
+      id: story.id,
+      title: story.title,
+      epicName: story.epic?.name ?? null,
+      taskCount: story.tasks.length,
+      completedTaskCount: story.tasks.filter(
+        (task) => task.status === "DONE",
+      ).length,
+      status: (story.tasks.length > 0 &&
+      story.tasks.every((task) => task.status === "DONE")
+        ? "DONE"
+        : story.tasks.some((task) => task.status === "IN_PROGRESS")
+          ? "IN_PROGRESS"
+          : "TODO") as "TODO" | "IN_PROGRESS" | "DONE",
     })),
   }));
 
@@ -378,19 +393,19 @@ async function ProjectContent({
                         key={task.id}
                         href={`/projects/${project.id}/tasks/${task.id}/edit`}
                         aria-label={`Modifier la tâche : ${task.title}`}
-                        className="block rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-indigo-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                        className="block rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition hover:border-indigo-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                       >
-                        <h3 className="break-words font-semibold text-slate-900">
+                        <h3 className="break-words text-sm font-semibold leading-tight text-slate-900">
                           {task.title}
                         </h3>
 
                         {task.description && (
-                          <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-600">
+                          <p className="mt-1 truncate text-sm text-slate-600">
                             {task.description}
                           </p>
                         )}
 
-                        <div className="mt-3 flex flex-wrap gap-2">
+                        <div className="mt-2 flex flex-wrap gap-1.5">
                           <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
                             {typeLabels[task.type]}
                           </span>
@@ -402,29 +417,26 @@ async function ProjectContent({
                           </span>
                         </div>
 
-                        <div className="mt-3 break-words text-xs text-slate-500">
-                          <p>
-                            <span className="font-medium">Story :</span>{" "}
-                            {task.storyTitle}
-                          </p>
-
-                          <p className="mt-1">
-                            <span className="font-medium">Epic :</span>{" "}
-                            {task.epicName}
-                          </p>
+                        <div className="mt-2 truncate text-xs text-slate-500">
+                          <span className="font-medium">Story :</span>{" "}
+                          {task.storyTitle}
+                          <span className="mx-1 text-slate-300">•</span>
+                          <span className="font-medium">Epic :</span>{" "}
+                          {task.epicName}
                         </div>
 
-                        <div className="mt-3 text-xs text-slate-500">
-                          <span className="font-medium">Assigné à : </span>
-                          {task.assignee?.name ||
-                            task.assignee?.email ||
-                            "Personne"}
-                        </div>
+                        <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-500">
+                          <span className="truncate">
+                            <span className="font-medium">Assigné à : </span>
+                            {task.assignee?.name ||
+                              task.assignee?.email ||
+                              "Personne"}
+                          </span>
 
-                        <p className="mt-3 text-xs text-slate-400">
-                          Créée le{" "}
-                          {task.createdAt.toLocaleDateString("fr-FR")}
-                        </p>
+                          <span className="shrink-0 text-slate-400">
+                            {task.createdAt.toLocaleDateString("fr-FR")}
+                          </span>
+                        </div>
                       </Link>
                     ))}
 
