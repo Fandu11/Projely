@@ -43,17 +43,6 @@ type ProjectSprint = {
   stories: SprintStory[];
 };
 
-type ProjectTask = {
-  id: string;
-  title: string;
-  status: "TODO" | "IN_PROGRESS" | "TO_REVIEW" | "DONE";
-  type: "TASK" | "BUG";
-  priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-  storyTitle: string;
-  epicName: string;
-  sprintId: string | null;
-};
-
 type BacklogTask = {
   id: string;
   title: string;
@@ -83,7 +72,6 @@ type ProjectTabsProps = {
   tasksContent: ReactNode;
   calendarContent: ReactNode;
   sprints: ProjectSprint[];
-  allTasks: ProjectTask[];
   epics: BacklogEpic[];
   standaloneStories: BacklogStory[];
   standaloneTasks: BacklogTask[];
@@ -104,34 +92,6 @@ type TabId = (typeof tabs)[number]["id"];
 
 const initialMemberState: MemberActionState = {};
 
-const statusLabels: Record<ProjectTask["status"], string> = {
-  TODO: "À faire",
-  IN_PROGRESS: "En cours",
-  TO_REVIEW: "À revoir",
-  DONE: "Terminée",
-};
-
-const priorityLabels: Record<ProjectTask["priority"], string> = {
-  LOW: "Faible",
-  MEDIUM: "Moyenne",
-  HIGH: "Haute",
-  CRITICAL: "Critique",
-};
-
-const statusColors: Record<ProjectTask["status"], string> = {
-  TODO: "bg-slate-100 text-slate-700",
-  IN_PROGRESS: "bg-blue-100 text-blue-700",
-  TO_REVIEW: "bg-amber-100 text-amber-700",
-  DONE: "bg-emerald-100 text-emerald-700",
-};
-
-const priorityColors: Record<ProjectTask["priority"], string> = {
-  LOW: "text-slate-500",
-  MEDIUM: "text-blue-600",
-  HIGH: "text-orange-600",
-  CRITICAL: "text-red-600",
-};
-
 export default function ProjectTabs({
   projectId,
   projectName,
@@ -143,7 +103,6 @@ export default function ProjectTabs({
   tasksContent,
   calendarContent,
   sprints,
-  allTasks,
   epics,
   standaloneStories,
   standaloneTasks,
@@ -179,9 +138,25 @@ export default function ProjectTabs({
     initialMemberState,
   );
 
-  const unassignedTasks = allTasks.filter(
-    (task) => task.sprintId === null,
-  );
+  const projectStories = [
+    ...epics.flatMap((epic) =>
+      epic.stories.map((story) => ({
+        ...story,
+        epicName: epic.name,
+      })),
+    ),
+    ...standaloneStories.map((story) => ({
+      ...story,
+      epicName: null,
+    })),
+  ];
+
+  const unfinishedStories = projectStories.filter((story) => {
+    return (
+      story.tasks.length === 0 ||
+      story.tasks.some((task) => task.status !== "DONE")
+    );
+  });
 
   return (
     <div>
@@ -236,47 +211,47 @@ export default function ProjectTabs({
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
             <div className="border-b border-slate-200 px-4 py-4">
               <h2 className="text-lg font-semibold text-slate-900">
-                Toutes les tâches
+                Stories non terminées
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                {unassignedTasks.length} tâche(s) sans sprint
+                {unfinishedStories.length} story(s) à terminer
               </p>
             </div>
 
-            {unassignedTasks.length === 0 ? (
+            {unfinishedStories.length === 0 ? (
               <p className="p-5 text-sm text-slate-500">
-                Aucune tâche sans sprint pour le moment.
+                Toutes les stories du projet sont terminées.
               </p>
             ) : (
               <div className="divide-y divide-slate-100">
-                {unassignedTasks.map((task) => (
-                  <Link
-                    key={task.id}
-                    href={`/projects/${projectId}/tasks/${task.id}/edit`}
-                    className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 transition hover:bg-slate-50"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900">
-                      {task.title}
-                    </span>
+                {unfinishedStories.map((story) => {
+                  const remainingTasks = story.tasks.filter(
+                    (task) => task.status !== "DONE",
+                  ).length;
 
-                    <span className="text-xs text-slate-500">
-                      {task.type === "BUG" ? "Bug" : "Tâche"}
-                    </span>
-
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusColors[task.status]}`}
+                  return (
+                    <Link
+                      key={story.id}
+                      href={`/projects/${projectId}?tab=backlog`}
+                      className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 transition hover:bg-slate-50"
                     >
-                      {statusLabels[task.status]}
-                    </span>
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900">
+                        {story.title}
+                      </span>
 
-                    <span
-                      className={`text-xs font-medium ${priorityColors[task.priority]}`}
-                    >
-                      {priorityLabels[task.priority]}
-                    </span>
-                  </Link>
-                ))}
+                      {story.epicName && (
+                        <span className="text-xs text-slate-500">
+                          Epic : {story.epicName}
+                        </span>
+                      )}
+
+                      <span className="text-xs font-medium text-amber-600">
+                        {remainingTasks} tâche(s) restante(s)
+                      </span>
+                    </Link>
+                  );
+                })}
               </div>
             )}
           </section>

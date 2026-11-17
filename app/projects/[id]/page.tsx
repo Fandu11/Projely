@@ -346,16 +346,6 @@ async function ProjectContent({
             priority: task.priority,
           })),
         }))}
-        allTasks={tasks.map((task) => ({
-          id: task.id,
-          title: task.title,
-          status: task.status,
-          type: task.type,
-          priority: task.priority,
-          storyTitle: task.storyTitle,
-          epicName: task.epicName,
-          sprintId: task.sprintId,
-        }))}
         sprints={calendarSprints}
         calendarContent={
           <CalendarView
