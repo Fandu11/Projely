@@ -1,18 +1,37 @@
 
 "use client";
 
-import { useActionState, useState } from "react";
-import { createSprint } from "./actions";
+import { useActionState, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { createSprint, updateStorySprint } from "./actions";
 
 type SprintStatus = "PLANNED" | "ACTIVE" | "COMPLETED";
 
 type SprintStory = {
   id: string;
   title: string;
+  sprintId: string;
   epicName: string | null;
+  assignees: {
+    id: string;
+    name: string | null;
+    email: string;
+  }[];
   taskCount: number;
   completedTaskCount: number;
   status: "TODO" | "IN_PROGRESS" | "DONE";
+};
+
+const storyStatusLabels: Record<SprintStory["status"], string> = {
+  TODO: "À faire",
+  IN_PROGRESS: "En cours",
+  DONE: "Terminée",
+};
+
+const storyStatusStyles: Record<SprintStory["status"], string> = {
+  TODO: "bg-slate-100 text-slate-700",
+  IN_PROGRESS: "bg-blue-100 text-blue-700",
+  DONE: "bg-emerald-100 text-emerald-700",
 };
 
 type SprintData = {
@@ -35,6 +54,7 @@ type SprintFormState = {
 type SprintsSectionProps = {
   projectId: string;
   sprints: SprintData[];
+  onStoryClick: (storyId: string) => void;
 };
 
 const sprintStatusLabels: Record<SprintStatus, string> = {
@@ -51,7 +71,17 @@ function formatDate(date: string): string {
   });
 }
 
-function StoryList({ stories }: { stories: SprintStory[] }) {
+function StoryList({
+  projectId,
+  sprints,
+  stories,
+  onStoryClick,
+}: {
+  projectId: string;
+  sprints: SprintData[];
+  stories: SprintStory[];
+  onStoryClick: (storyId: string) => void;
+}) {
   if (stories.length === 0) {
     return (
       <p className="mt-4 text-sm text-gray-500">
@@ -66,16 +96,51 @@ function StoryList({ stories }: { stories: SprintStory[] }) {
         <li key={story.id} className="rounded-lg border border-gray-200 p-3">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="font-medium text-gray-900">{story.title}</p>
+              <button
+                type="button"
+                onClick={() => onStoryClick(story.id)}
+                className="text-left font-medium text-gray-900 hover:text-blue-700"
+              >
+                {story.title}
+              </button>
               {story.epicName && (
                 <p className="text-xs text-gray-500">
                   Epic : {story.epicName}
                 </p>
               )}
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-gray-500">Responsables :</span>
+                {story.assignees.length > 0 ? (
+                  story.assignees.map((person) => (
+                    <span
+                      key={person.id}
+                      className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700"
+                    >
+                      {person.name || person.email}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-xs text-gray-400">
+                    Aucune personne assignée
+                  </span>
+                )}
+              </div>
             </div>
-            <span className="text-xs text-gray-600">
-              {story.completedTaskCount}/{story.taskCount} tâches terminées
-            </span>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <span className="text-xs text-gray-600">
+                {story.completedTaskCount}/{story.taskCount} tâches terminées
+              </span>
+              <span
+                className={`w-fit rounded-full px-2.5 py-1 text-xs font-medium ${storyStatusStyles[story.status]}`}
+              >
+                {storyStatusLabels[story.status]}
+              </span>
+              <StorySprintControl
+                projectId={projectId}
+                story={story}
+                sprints={sprints}
+              />
+            </div>
           </div>
         </li>
       ))}
@@ -83,10 +148,77 @@ function StoryList({ stories }: { stories: SprintStory[] }) {
   );
 }
 
+function StorySprintControl({
+  projectId,
+  story,
+  sprints,
+}: {
+  projectId: string;
+  story: SprintStory;
+  sprints: SprintData[];
+}) {
+  const router = useRouter();
+  const [selectedSprintId, setSelectedSprintId] = useState(story.sprintId);
+  const [error, setError] = useState("");
+  const [isPending, startTransition] = useTransition();
+
+  function updateSprint(sprintId: string) {
+    setError("");
+    setSelectedSprintId(sprintId);
+
+    startTransition(async () => {
+      const result = await updateStorySprint(
+        projectId,
+        story.id,
+        sprintId || null,
+      );
+
+      if (!result.success) {
+        setSelectedSprintId(story.sprintId);
+        setError(result.error ?? "Impossible de modifier le sprint.");
+        return;
+      }
+
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-2">
+        <label htmlFor={`sprint-story-${story.id}`} className="sr-only">
+          Sprint de la story {story.title}
+        </label>
+        <select
+          id={`sprint-story-${story.id}`}
+          value={selectedSprintId}
+          onChange={(event) => updateSprint(event.target.value)}
+          disabled={isPending}
+          className="max-w-44 rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:opacity-60"
+        >
+          <option value="">Aucun sprint</option>
+          {sprints.map((sprint) => (
+            <option
+              key={sprint.id}
+              value={sprint.id}
+              disabled={sprint.status === "COMPLETED"}
+            >
+              {sprint.name}
+              {sprint.status === "COMPLETED" ? " (terminé)" : ""}
+            </option>
+          ))}
+        </select>
+      </div>
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
 
 export default function SprintsSection({
   projectId,
   sprints,
+  onStoryClick,
 }: SprintsSectionProps) {
   const [showForm, setShowForm] = useState(false);
 
@@ -290,7 +422,12 @@ export default function SprintsSection({
                     Stories du sprint
                   </h4>
 
-                  <StoryList stories={sprint.stories} />
+                  <StoryList
+                    projectId={projectId}
+                    sprints={sprints}
+                    stories={sprint.stories}
+                    onStoryClick={onStoryClick}
+                  />
                 </div>
               </article>
             );

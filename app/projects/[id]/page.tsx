@@ -114,6 +114,13 @@ async function ProjectContent({
                   id: true,
                   title: true,
                   status: true,
+                  assignee: {
+                    select: {
+                      id: true,
+                      name: true,
+                      email: true,
+                    },
+                  },
                 },
               },
             },
@@ -142,6 +149,13 @@ async function ProjectContent({
                   priority: true,
                   storyId: true,
                   sprintId: true,
+                  assignee: {
+                    select: {
+                      id: true,
+                      name: true,
+                      email: true,
+                    },
+                  },
                 },
               },
             },
@@ -163,6 +177,13 @@ async function ProjectContent({
               priority: true,
               storyId: true,
               sprintId: true,
+              assignee: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
             },
           },
         },
@@ -236,6 +257,13 @@ async function ProjectContent({
       type: true,
       status: true,
       priority: true,
+      assignee: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
     },
   });
 
@@ -262,7 +290,15 @@ async function ProjectContent({
     stories: sprint.stories.map((story) => ({
       id: story.id,
       title: story.title,
+      sprintId: sprint.id,
       epicName: story.epic?.name ?? null,
+      assignees: Array.from(
+        new Map(
+          story.tasks
+            .filter((task) => task.assignee)
+            .map((task) => [task.assignee!.id, task.assignee!]),
+        ).values(),
+      ),
       taskCount: story.tasks.length,
       completedTaskCount: story.tasks.filter(
         (task) => task.status === "DONE",
@@ -326,24 +362,30 @@ async function ProjectContent({
           stories: epic.stories.map((story) => ({
             id: story.id,
             title: story.title,
+            description: story.description,
+            sprintId: story.sprintId,
             tasks: story.tasks.map((task) => ({
               id: task.id,
               title: task.title,
               type: task.type,
               status: task.status,
               priority: task.priority,
+              assignee: task.assignee,
             })),
           })),
         }))}
         standaloneStories={project.stories.map((story) => ({
           id: story.id,
           title: story.title,
+          description: story.description,
+          sprintId: story.sprintId,
           tasks: story.tasks.map((task) => ({
             id: task.id,
             title: task.title,
             type: task.type,
             status: task.status,
             priority: task.priority,
+            assignee: task.assignee,
           })),
         }))}
         sprints={calendarSprints}

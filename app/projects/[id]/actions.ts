@@ -518,6 +518,200 @@ export async function updateBacklogStory(
   }
 }
 
+export async function updateStorySprint(
+  projectId: string,
+  storyId: string,
+  sprintId: string | null,
+): Promise<UpdateBacklogResult> {
+  try {
+    if (!(await canEditProject(projectId))) {
+      return {
+        success: false,
+        error: "Tu n'as pas l'autorisation de déplacer cette Story.",
+      };
+    }
+
+    const story = await prisma.story.findFirst({
+      where: {
+        id: storyId,
+        projectId,
+      },
+      select: { id: true },
+    });
+
+    if (!story) {
+      return {
+        success: false,
+        error: "Story introuvable dans ce projet.",
+      };
+    }
+
+    if (sprintId) {
+      const sprint = await prisma.sprint.findFirst({
+        where: {
+          id: sprintId,
+          projectId,
+          status: { not: "COMPLETED" },
+        },
+        select: { id: true },
+      });
+
+      if (!sprint) {
+        return {
+          success: false,
+          error: "Le sprint sélectionné est introuvable ou terminé.",
+        };
+      }
+    }
+
+    await prisma.story.update({
+      where: { id: story.id },
+      data: { sprintId },
+    });
+
+    revalidatePath(`/projects/${projectId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Erreur déplacement Story :", error);
+
+    return {
+      success: false,
+      error: "Impossible de déplacer la Story.",
+    };
+  }
+}
+
+export async function updateStoryTaskStatus(
+  projectId: string,
+  storyId: string,
+  taskId: string,
+  status: (typeof allowedStatuses)[number],
+): Promise<UpdateBacklogResult> {
+  try {
+    if (!(await canEditProject(projectId))) {
+      return {
+        success: false,
+        error: "Tu n'as pas l'autorisation de modifier cette tâche.",
+      };
+    }
+
+    if (!allowedStatuses.includes(status)) {
+      return {
+        success: false,
+        error: "L'état sélectionné est invalide.",
+      };
+    }
+
+    const task = await prisma.task.findFirst({
+      where: {
+        id: taskId,
+        projectId,
+        storyId,
+      },
+      select: { id: true },
+    });
+
+    if (!task) {
+      return {
+        success: false,
+        error: "Sous-tâche introuvable dans cette Story.",
+      };
+    }
+
+    await prisma.task.update({
+      where: { id: task.id },
+      data: { status },
+    });
+
+    revalidatePath(`/projects/${projectId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Erreur modification état sous-tâche :", error);
+
+    return {
+      success: false,
+      error: "Impossible de modifier l'état de la sous-tâche.",
+    };
+  }
+}
+
+export async function updateStoryTaskAssignee(
+  projectId: string,
+  storyId: string,
+  taskId: string,
+  assigneeId: string | null,
+): Promise<UpdateBacklogResult> {
+  try {
+    if (!(await canEditProject(projectId))) {
+      return {
+        success: false,
+        error: "Tu n'as pas l'autorisation de modifier cette tâche.",
+      };
+    }
+
+    const project = await prisma.project.findFirst({
+      where: { id: projectId },
+      select: {
+        ownerId: true,
+        members: {
+          select: { id: true },
+        },
+      },
+    });
+
+    if (!project) {
+      return {
+        success: false,
+        error: "Projet introuvable.",
+      };
+    }
+
+    if (
+      assigneeId &&
+      assigneeId !== project.ownerId &&
+      !project.members.some((member) => member.id === assigneeId)
+    ) {
+      return {
+        success: false,
+        error: "La personne choisie n'appartient pas à ce projet.",
+      };
+    }
+
+    const task = await prisma.task.findFirst({
+      where: {
+        id: taskId,
+        projectId,
+        storyId,
+      },
+      select: { id: true },
+    });
+
+    if (!task) {
+      return {
+        success: false,
+        error: "Sous-tâche introuvable dans cette Story.",
+      };
+    }
+
+    await prisma.task.update({
+      where: { id: task.id },
+      data: { assigneeId },
+    });
+
+    revalidatePath(`/projects/${projectId}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Erreur modification responsable sous-tâche :", error);
+
+    return {
+      success: false,
+      error: "Impossible de modifier le responsable de la sous-tâche.",
+    };
+  }
+}
 
 export async function deleteBacklogStory(
   projectId: string,
