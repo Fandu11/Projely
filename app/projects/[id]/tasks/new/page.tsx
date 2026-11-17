@@ -186,7 +186,7 @@ export default async function NewProjectElementPage({
             htmlFor="type"
             className="mb-2 block text-sm font-medium text-gray-700"
           >
-            Type d'élément
+            Type d&apos;élément
           </label>
 
           <select
@@ -413,7 +413,7 @@ export default async function NewProjectElementPage({
             type="submit"
             className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
           >
-            Créer l'élément
+            Créer l&apos;élément
           </button>
         </div>
       </form>

@@ -83,7 +83,7 @@ export default function LoginPage() {
       <p className="mt-4">
         Pas encore de compte ?{" "}
         <Link href="/register" className="underline">
-          S'inscrire
+          S&apos;inscrire
         </Link>
       </p>
     </main>

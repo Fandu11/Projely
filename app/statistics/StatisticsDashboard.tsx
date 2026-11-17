@@ -305,7 +305,7 @@ export default function StatisticsDashboard({ projects, totals }: Props) {
             Statistiques
           </h1>
           <p className="mt-2 text-sm text-slate-500">
-            Visualise l'avancement, le pipeline et les priorités de tes projets.
+            Visualise l&apos;avancement, le pipeline et les priorités de tes projets.
           </p>
         </div>
 
@@ -381,7 +381,7 @@ export default function StatisticsDashboard({ projects, totals }: Props) {
           </div>
 
           <p className="mt-6 rounded-lg bg-slate-50 p-3 text-xs leading-5 text-slate-500">
-            Chaque barre indique la part de cette catégorie dans l'ensemble
+            Chaque barre indique la part de cette catégorie dans l&apos;ensemble
             des tâches. Les catégories dépendent des statuts configurés dans
             ton application.
           </p>

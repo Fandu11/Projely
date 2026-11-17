@@ -154,7 +154,7 @@ export default async function TeamDetailsPage({
           {isOwner && (
             <section className="rounded-xl border border-slate-200 bg-white p-5">
               <h2 className="text-lg font-semibold text-slate-900">
-                Informations de l'équipe
+                Informations de l&apos;équipe
               </h2>
 
               <form action={updateTeam} className="mt-5 space-y-4">
@@ -289,10 +289,10 @@ export default async function TeamDetailsPage({
             {team.projects.length === 0 ? (
               <div className="mt-4 rounded-lg bg-slate-50 p-4">
                 <p className="text-sm text-slate-600">
-                  Aucun projet n'est associé à cette équipe pour le moment.
+                  Aucun projet n&apos;est associé à cette équipe pour le moment.
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  L'association des équipes aux projets sera ajoutée
+                  L&apos;association des équipes aux projets sera ajoutée
                   dans une prochaine étape.
                 </p>
               </div>
@@ -319,8 +319,8 @@ export default async function TeamDetailsPage({
                 Ajouter un membre
               </h2>
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                L'utilisateur doit déjà posséder un compte Projectly.
-                Il recevra l'accès à l'équipe immédiatement.
+                L&apos;utilisateur doit déjà posséder un compte Projectly.
+                Il recevra l&apos;accès à l&apos;équipe immédiatement.
               </p>
 
               <form action={addTeamMember} className="mt-5 space-y-3">
@@ -348,7 +348,7 @@ export default async function TeamDetailsPage({
                   type="submit"
                   className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700"
                 >
-                  Ajouter à l'équipe
+                  Ajouter à l&apos;équipe
                 </button>
               </form>
             </section>
@@ -405,7 +405,7 @@ export default async function TeamDetailsPage({
                   type="submit"
                   className="w-full rounded-lg border border-red-200 px-4 py-2.5 text-sm font-medium text-red-700 hover:bg-red-50"
                 >
-                  Supprimer l'équipe
+                  Supprimer l&apos;équipe
                 </button>
               </form>
             </section>

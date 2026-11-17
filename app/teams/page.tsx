@@ -206,7 +206,7 @@ export default async function TeamsPage({ searchParams }: PageProps) {
                   </div>
 
                   <p className="mt-3 text-sm font-medium text-indigo-600">
-                    Consulter l'équipe →
+                    Consulter l&apos;équipe →
                   </p>
                 </Link>
               ))}
@@ -233,7 +233,7 @@ export default async function TeamsPage({ searchParams }: PageProps) {
                 htmlFor="team-name"
                 className="mb-1.5 block text-sm font-medium text-slate-700"
               >
-                Nom de l'équipe
+                Nom de l&apos;équipe
               </label>
               <input
                 id="team-name"
@@ -266,12 +266,12 @@ export default async function TeamsPage({ searchParams }: PageProps) {
               type="submit"
               className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700"
             >
-              Créer l'équipe
+              Créer l&apos;équipe
             </button>
 
             <p className="text-xs leading-5 text-slate-500">
               Tu seras automatiquement propriétaire et membre de
-              l'équipe créée.
+              l&apos;équipe créée.
             </p>
           </form>
         </aside>

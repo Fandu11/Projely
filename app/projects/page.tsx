@@ -43,7 +43,7 @@ async function ProjectsContent() {
         <div>
           <h1 className="text-3xl font-bold">Mes projets</h1>
           <p className="mt-2 text-sm text-slate-500">
-            Organise ton travail et suis l'avancement de tes projets.
+            Organise ton travail et suis l&apos;avancement de tes projets.
           </p>
         </div>
 

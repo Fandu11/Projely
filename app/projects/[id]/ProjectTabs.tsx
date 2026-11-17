@@ -3,7 +3,6 @@
 
 import {
   useActionState,
-  useEffect,
   useState,
   useTransition,
 } from "react";
@@ -12,7 +11,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 import BacklogSection from "./BacklogSection";
-import SprintsSection from "./SprintsSection";7
+import SprintsSection from "./SprintsSection";
 import ProjectSettings from "./ProjectSettings";
 
 import {
@@ -23,6 +22,11 @@ import {
   updateStoryTaskStatus,
   type MemberActionState,
 } from "./actions";
+import {
+  getStoryAssignees,
+  getStoryStatus,
+  type StoryStatus,
+} from "./story-utils";
 
 type ProjectMember = {
   id: string;
@@ -112,8 +116,6 @@ const taskStatusLabels: Record<BacklogTask["status"], string> = {
   DONE: "Terminée",
 };
 
-type StoryStatus = "TODO" | "IN_PROGRESS" | "DONE";
-
 const storyStatusLabels: Record<StoryStatus, string> = {
   TODO: "À faire",
   IN_PROGRESS: "En cours",
@@ -125,30 +127,6 @@ const storyStatusStyles: Record<StoryStatus, string> = {
   IN_PROGRESS: "bg-blue-100 text-blue-700",
   DONE: "bg-emerald-100 text-emerald-700",
 };
-
-function getStoryStatus(tasks: BacklogTask[]): StoryStatus {
-  if (tasks.length > 0 && tasks.every((task) => task.status === "DONE")) {
-    return "DONE";
-  }
-
-  if (tasks.some((task) => task.status === "IN_PROGRESS")) {
-    return "IN_PROGRESS";
-  }
-
-  return "TODO";
-}
-
-function getStoryAssignees(tasks: BacklogTask[]): ProjectMember[] {
-  const uniqueAssignees = new Map<string, ProjectMember>();
-
-  for (const task of tasks) {
-    if (task.assignee) {
-      uniqueAssignees.set(task.assignee.id, task.assignee);
-    }
-  }
-
-  return Array.from(uniqueAssignees.values());
-}
 
 function TaskStatusControl({
   projectId,
@@ -379,19 +357,13 @@ export default function ProjectTabs({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState<TabId>("tasks");
   const [selectedStory, setSelectedStory] =
     useState<BacklogStory | null>(null);
 
-  useEffect(() => {
-    const tab = searchParams.get("tab");
-
-    if (tabs.some((item) => item.id === tab)) {
-      setActiveTab(tab as TabId);
-    } else {
-      setActiveTab("tasks");
-    }
-  }, [searchParams]);
+  const tabParam = searchParams.get("tab");
+  const activeTab: TabId = tabs.some((item) => item.id === tabParam)
+    ? (tabParam as TabId)
+    : "tasks";
 
   const allMembers = [
     { ...owner, role: "Propriétaire" },
@@ -447,8 +419,6 @@ export default function ProjectTabs({
             key={tab.id}
             type="button"
             onClick={() => {
-              setActiveTab(tab.id);
-
               const params = new URLSearchParams(searchParams.toString());
               params.set("tab", tab.id);
 

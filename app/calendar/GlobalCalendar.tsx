@@ -152,7 +152,7 @@ export default function GlobalCalendar({ events }: Props) {
               onClick={goToToday}
               className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
-              Aujourd'hui
+              Aujourd&apos;hui
             </button>
             <button
               type="button"
@@ -239,7 +239,7 @@ export default function GlobalCalendar({ events }: Props) {
         <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-500">
           <span className="flex items-center gap-2">
             <span className="h-3 w-3 rounded bg-indigo-100" />
-            Période d'un sprint
+            Période d&apos;un sprint
           </span>
           <span>Choisis une journée pour voir les détails.</span>
         </div>
